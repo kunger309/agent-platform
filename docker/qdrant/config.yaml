@@ -1,0 +1,13 @@
+# Qdrant configuration
+storage:
+  # 持久化路径（与 docker volume 对应）
+  storage_path: /qdrant/storage
+
+service:
+  http_port: 6333
+  grpc_port: 6334
+  enable_cors: true
+  # 开发环境允许所有来源，生产环境收紧
+  cors_allow_origins: '*'
+
+log_level: INFO
