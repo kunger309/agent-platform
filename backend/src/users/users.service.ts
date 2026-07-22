@@ -12,8 +12,9 @@ export class UsersService {
   ) {}
 
   async findAll(currentUser: any) {
+    const where = await this.rbac.buildDataScopeFilter(currentUser, 'user');
     return this.prisma.user.findMany({
-      where: this.rbac.buildDataScopeFilter(currentUser, 'user'),
+      where,
       select: {
         id: true,
         username: true,

@@ -19,10 +19,10 @@ export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.getAllAndOverride<any>(REQUIRE_PERMISSION_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const required = this.reflector.getAllAndOverride<string | { type: string; codes: string[] }>(
+      REQUIRE_PERMISSION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     // 没有 @RequirePermission 装饰器 → 不做检查
     if (!required) return true;
@@ -39,7 +39,7 @@ export class PermissionsGuard implements CanActivate {
 
     const userCodes: string[] = user.permissionCodes ?? [];
 
-    // 单权限码
+    // 单权限码（字符串）
     if (typeof required === 'string') {
       if (!userCodes.includes(required)) {
         throw new ForbiddenException(`Missing permission: ${required}`);
@@ -48,8 +48,8 @@ export class PermissionsGuard implements CanActivate {
     }
 
     // 多权限码（OR 语义）
-    if (required.type === 'any') {
-      const has = required.codes.some((c: string) => userCodes.includes(c));
+    if (required && required.type === 'any' && Array.isArray(required.codes)) {
+      const has = required.codes.some((c) => userCodes.includes(c));
       if (!has) {
         throw new ForbiddenException(
           `Missing any permission of: ${required.codes.join(', ')}`,

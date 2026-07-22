@@ -1,5 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { Controller, Get, Request } from '@nestjs/common';
 import { SkipAuth } from '../common/decorators/public.decorator';
 import { PermissionsService } from './permissions.service';
 
@@ -9,8 +8,8 @@ export class PermissionsController {
 
   /**
    * 当前登录用户的权限码列表 + 权限树（用于前端动态渲染菜单）
+   * 全局 JwtAuthGuard 已自动拦截未登录请求
    */
-  @UseGuards(JwtAuthGuard)
   @Get('mine')
   async mine(@Request() req: any) {
     return {

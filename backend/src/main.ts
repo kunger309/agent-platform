@@ -1,13 +1,17 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
+
+  const reflector = app.get(Reflector);
 
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3000);
@@ -29,6 +33,12 @@ async function bootstrap() {
 
   // 全局异常过滤器
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  // 全局守卫（顺序：JwtAuthGuard 鉴权 → PermissionsGuard 权限码校验）
+  app.useGlobalGuards(
+    new JwtAuthGuard(reflector),
+    new PermissionsGuard(reflector),
+  );
 
   // CORS
   app.enableCors({
