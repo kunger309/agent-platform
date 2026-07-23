@@ -56,7 +56,26 @@ const routes = [
   {
     path: '/chat',
     component: () => import('@/views/chat/Chat.vue'),
-    meta: { requiresAuth: true, title: '智能对话', icon: 'ChatDotRound' },
+    meta: { requiresAuth: true, permission: 'agent:run', title: '智能对话', icon: 'ChatDotRound' },
+  },
+
+  // 智能体
+  {
+    path: '/agents',
+    component: () => import('@/views/agents/AgentList.vue'),
+    meta: { requiresAuth: true, permission: 'agent:list', title: '智能体', icon: 'MagicStick' },
+  },
+  {
+    path: '/agents/:id/debug',
+    component: () => import('@/views/agents/AgentDebug.vue'),
+    meta: { requiresAuth: true, permission: 'agent:run', title: '调试对话', hideInMenu: true },
+  },
+
+  // 模型配置
+  {
+    path: '/providers',
+    component: () => import('@/views/providers/ProviderList.vue'),
+    meta: { requiresAuth: true, permission: 'provider:list', title: '模型配置', icon: 'Connection' },
   },
 
   // 个人中心

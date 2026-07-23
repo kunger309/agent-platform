@@ -520,21 +520,43 @@ LLM Provider
 - [x] 后端 RBAC（PermissionsGuard + @RequirePermission + 数据范围）
 - [x] 前端登录 + 路由守卫 + Pinia user/permission store + <PermissionGuard>
 
-**Week 2（下一步）**：
-- [ ] LLM Provider 模块：CRUD + API Key 加密 + OpenAI 兼容 Adapter
-- [ ] 聊天智能体：LangChain AgentExecutor + SSE 流式输出
-- [ ] 前端 Provider / Agent 列表页 + Agent Debug 流式对话页
-- [ ] useChatStream composable
+**Week 2（已完成）**：
+- [x] LLM Provider 模块：CRUD + API Key 加密（AES-256-GCM）+ OpenAI 兼容 Adapter 工厂
+- [x] 聊天智能体：ChatEngine（LangChain ChatModel + SSE 流式）+ `/api/agents/:id/chat`
+- [x] 前端 Provider / Agent 列表页 + Agent Debug 流式对话页
+- [x] `useChatStream` composable
 
-**Week 3**：
-- [ ] 端到端验证：docker compose up → admin/123456 登录 → 配置 Provider → 创建 Agent → 流式对话
-- [ ] 修复所有 bug
-- [ ] README + 部署文档
+**Week 3（已完成）**：
+- [x] 端到端验证：admin/123456 登录 → /api/llm-providers → /api/agents → /api/chat（SSE 多轮）全通
+- [x] 补全「智能对话」页（`Chat.vue` 从占位改为真实流式多会话，后端新增 `/api/chat` 用默认 Provider 直接聊）
+- [x] 修复残留 bug：左侧菜单（App.vue layout 判断）、用户管理（api 聚合 + DTO 字段）、聊天读-写顺序、MiniMax 端点（com vs chat）
+- [x] UI 自适应优化：1080p / 2K / 4K CSS 变量 + 媒体查询断点；聊天气泡限宽 + `<think>` 折叠
+- [x] README（根目录）+ 部署文档（docker/README.md）
 
-### Phase 2：LangGraph 工作流智能体（3 周）
-- 后端：LangGraph 引擎封装 + DAG 编译 + 节点库（LLM/Tool/KB/Condition/Code/HTTP/Answer）
-- 前端：vue-flow 可视化编辑器
-- 执行/调试/版本管理
+### Phase 2：LangGraph 工作流智能体 + 通用对话存库（3 周）
+
+**核心**：LangGraph 工作流引擎 + vue-flow 可视化编辑器
+
+**任务清单**：
+- [ ] 后端：`workflow` 模块——LangGraph `StateGraph` 封装 + DAG 编译（前端 vue-flow JSON → CompiledGraph）
+- [ ] 后端：节点库先做 3 个核心——LLM（复用 ChatEngine）/ Tool（基础工具调用）/ KB（占位接口，Phase 3 充实）
+- [ ] 后端：节点库扩展——Condition / Code / HTTP / Answer（按需）
+- [ ] 后端：Prisma 新增 4 张表——`Workflow / WorkflowVersion / WorkflowRun / NodeExecution`
+- [ ] 后端：状态 Schema（class-validator）——`GraphState = { messages, artifacts, variables, current_step }`
+- [ ] 后端：执行 SSE 接口——`POST /api/workflows/:id/runs` 输出每步事件
+- [ ] 后端：**通用对话存库（Phase 1 Week 3 遗漏的 P0）**——`/api/chat` 复用已有 Conversation/Message 表，模仿 `AgentsService.chat()` 模式做"先存 user → 加载历史 → 流式 → stream.on('end') 存 assistant"；新增 `listConversations / getConversationMessages / deleteConversation`
+- [ ] 后端：工作流 CRUD + 版本管理接口
+- [ ] 前端：装 `@vue-flow/core` + `@vue-flow/controls` + `@vue-flow/background`
+- [ ] 前端：`views/workflow/WorkflowList.vue`（列表 + 创建 + 版本切换）
+- [ ] 前端：`views/workflow/WorkflowEditor.vue`（核心：拖拽节点 + 连线 + 节点配置抽屉 + 保存版本）
+- [ ] 前端：`views/workflow/WorkflowDebug.vue`（输入测试 + SSE 看每节点实时输出）
+- [ ] 前端：**通用对话会话列表接入**——`Chat.vue` 把本地 mock 会话列表替换为接口数据 + 切换会话加载历史
+- [ ] 前端：节点组件——LLMNode / ToolNode / KbNode / ConditionNode / AnswerNode
+- [ ] 端到端验证：创建 DAG → 配置节点 → 运行 → 查看每节点输入/输出
+
+**风险**：
+- LangGraph.js vs Python 版能力差距 → PoC 关键能力验证后再全面展开
+- 工作流可视化编辑器工程量大 → 按节点库分批交付，先做 LLM 节点
 
 ### Phase 3：知识库 + 文档解析（2 周）
 - 字符/段落/语义切片 + Embedding + Qdrant 向量化
@@ -569,14 +591,13 @@ LLM Provider
 
 ---
 
-## 十二、立即可执行的下一步（Phase 1 Week 2）
+## 十二、立即可执行的下一步（Phase 2：LangGraph 工作流智能体）
 
-1. 初始化 NestJS LLM Providers 模块（controller/service/dto/encryption）
-2. 编写 OpenAI 兼容 Adapter 工厂（OpenAI / DeepSeek / Qwen / Ollama）
-3. 编写 chat-agent 引擎（LangChain AgentExecutor + SSE 流式）
-4. 前端 `views/providers/ProviderList.vue` + `views/agents/AgentList.vue` + `AgentDebug.vue`
-5. 编写 `useChatStream` composable
-6. `docker compose up` 验证端到端：admin 登录 → 创建 Provider → 创建 Chat Agent → 流式对话
+1. 后端 `workflow` 模块：LangGraph `StateGraph` 封装 + DAG 编译（前端 vue-flow JSON → StateGraph）
+2. 节点库（先做 3 个核心）：`LLM` / `Tool` / `KB`，其余按需扩展（Condition / Code / HTTP / Answer）
+3. 前端 `views/workflow/`：基于 `@vue-flow/core` 的可视化编辑器（拖拽节点 + 连线 + 节点配置面板）
+4. 工作流执行 / 调试 / 版本管理接口
+5. 端到端验证：创建 DAG → 配置节点 → 运行 → 查看各节点输入/输出
 
 ---
 
@@ -588,3 +609,5 @@ LLM Provider
 | 2026-07-22 | 调整为：NestJS + Vue 3 JS（不引 TS）+ 完整 RBAC + admin/123456 默认账号 |
 | 2026-07-22 | **方案 C**：Qdrant 默认 + Milvus 预留适配器位置 |
 | 2026-07-22 | Phase 1 Week 1 完成：monorepo + NestJS + Prisma + seed + Docker + 登录闭环 |
+| 2026-07-23 | **Phase 1 全部完成**：Week 2（LLM Provider + 聊天智能体 + 前端 3 页 + useChatStream）+ Week 3（端到端验证 + 智能对话页补全 + UI 自适应 1080p/2K/4K + README）|
+| 2026-07-23 | 新增 `/api/chat` 通用对话端点（用默认 Provider 直接聊，SSE 流式），前端 `Chat.vue` 从占位改为真实多会话流式对话 |

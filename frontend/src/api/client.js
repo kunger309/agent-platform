@@ -9,10 +9,14 @@ import { ElMessage } from 'element-plus';
 import router from '@/router';
 
 const TOKEN_KEY = 'agent_platform_token';
+const USER_KEY = 'agent_platform_user';
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+export const clearToken = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  try { localStorage.removeItem(USER_KEY); } catch (_) {}
+};
 
 const client = axios.create({
   baseURL: '/api',
@@ -31,11 +35,17 @@ client.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
+// ★ 标记：app 启动期（前 N 秒）的 401 不立刻跳登录，避免误杀
+const BOOT_GRACE_MS = 5000;
+const bootTime = Date.now();
+function inBootGrace() {
+  return Date.now() - bootTime < BOOT_GRACE_MS;
+}
+
 // ===== 响应拦截器：401 处理 + 数据解包 =====
 client.interceptors.response.use(
   (response) => {
     const body = response.data;
-    // 后端统一返回 { success, data, message }
     if (body && typeof body === 'object' && 'success' in body) {
       if (!body.success) {
         ElMessage.error(body.message || '请求失败');
@@ -50,11 +60,14 @@ client.interceptors.response.use(
     const message = error.response?.data?.message || error.message;
 
     if (status === 401) {
+      console.warn('[client] 401 received, inBootGrace=', inBootGrace(), 'url=', error.config?.url);
       clearToken();
-      ElMessage.warning('登录已过期，请重新登录');
-      // 避免无限重定向：只在非登录页时跳转
-      if (router.currentRoute.value.path !== '/login') {
-        router.push('/login');
+      // ★ 启动期 401：清 token 但不跳登录，让守卫处理
+      if (!inBootGrace()) {
+        ElMessage.warning('登录已过期，请重新登录');
+        if (router.currentRoute.value.path !== '/login') {
+          router.push('/login');
+        }
       }
     } else if (status === 403) {
       ElMessage.error('权限不足');

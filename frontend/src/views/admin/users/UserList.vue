@@ -1,21 +1,21 @@
 <template>
-  <div class="page">
-    <h2 class="page-title">用户管理</h2>
+  <div class="page page-container">
+    <h2>用户管理</h2>
 
-    <el-card shadow="never">
-      <div class="toolbar">
-        <el-input v-model="query.keyword" placeholder="搜索用户名/昵称/邮箱" clearable style="width: 240px" @change="loadList" />
-        <el-select v-model="query.status" placeholder="状态" clearable style="width: 140px; margin-left: 8px" @change="loadList">
-          <el-option label="启用" value="active" />
-          <el-option label="禁用" value="disabled" />
-          <el-option label="锁定" value="locked" />
-        </el-select>
-        <el-button type="primary" :icon="Plus" style="margin-left: auto" @click="openCreate">新建用户</el-button>
-      </div>
+    <div class="table-card">
+    <div class="toolbar">
+      <el-input v-model="query.keyword" placeholder="搜索用户名/姓名/邮箱" clearable style="width: 240px" @change="loadList" />
+      <el-select v-model="query.status" placeholder="状态" clearable style="width: 140px" @change="loadList">
+        <el-option label="启用" value="active" />
+        <el-option label="禁用" value="disabled" />
+        <el-option label="锁定" value="locked" />
+      </el-select>
+      <el-button type="primary" :icon="Plus" style="margin-left: auto" @click="openCreate">新建用户</el-button>
+    </div>
 
-      <el-table :data="list" v-loading="loading" border stripe style="margin-top: 16px">
+    <el-table :data="list" v-loading="loading" border stripe style="margin-top: 16px">
         <el-table-column prop="username" label="用户名" width="140" />
-        <el-table-column prop="nickname" label="昵称" width="140" />
+        <el-table-column prop="name" label="姓名" width="140" />
         <el-table-column prop="email" label="邮箱" />
         <el-table-column label="角色" width="220">
           <template #default="{ row }">
@@ -49,14 +49,14 @@
         @current-change="loadList"
         @size-change="loadList"
       />
-    </el-card>
+    </div>
 
     <el-dialog v-model="dialog.visible" :title="dialog.id ? '编辑用户' : '新建用户'" width="540px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="form.username" :disabled="!!dialog.id" />
         </el-form-item>
-        <el-form-item label="昵称"><el-input v-model="form.nickname" /></el-form-item>
+        <el-form-item label="姓名"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="邮箱" prop="email"><el-input v-model="form.email" /></el-form-item>
         <el-form-item v-if="!dialog.id" label="密码" prop="password"><el-input v-model="form.password" type="password" show-password /></el-form-item>
         <el-form-item label="角色">
@@ -94,11 +94,11 @@ const query = reactive({ keyword: '', status: '', page: 1, pageSize: 10 });
 
 const dialog = reactive({ visible: false, id: null, saving: false });
 const formRef = ref(null);
-const form = reactive({ username: '', nickname: '', email: '', password: '', roleCodes: [], status: 'active' });
+const form = reactive({ username: '', name: '', email: '', password: '', roleCodes: [], status: 'active' });
 const rules = {
   username: [{ required: true, message: '请输入用户名' }],
+  name: [{ required: true, message: '请输入姓名' }],
   email: [{ type: 'email', message: '邮箱格式不正确' }],
-  password: [{ required: true, message: '请输入密码' }],
 };
 
 async function loadList() {
@@ -126,14 +126,14 @@ async function loadRoles() {
 
 function openCreate() {
   dialog.id = null;
-  Object.assign(form, { username: '', nickname: '', email: '', password: '', roleCodes: ['viewer'], status: 'active' });
+  Object.assign(form, { username: '', name: '', email: '', password: '', roleCodes: ['viewer'], status: 'active' });
   dialog.visible = true;
 }
 
 function openEdit(row) {
   dialog.id = row.id;
   Object.assign(form, {
-    username: row.username, nickname: row.nickname, email: row.email,
+    username: row.username, name: row.name, email: row.email,
     roleCodes: row.roles || [], status: row.status || 'active',
   });
   dialog.visible = true;
@@ -141,10 +141,20 @@ function openEdit(row) {
 
 async function save() {
   await formRef.value.validate();
+  // 新建时本地校验密码（rules 已不强制，避免编辑时残留空值报错）
+  if (!dialog.id && !form.password) {
+    ElMessage.warning('请输入密码');
+    return;
+  }
   dialog.saving = true;
   try {
-    if (dialog.id) await updateUser(dialog.id, form);
-    else await createUser(form);
+    if (dialog.id) {
+      // 编辑时不传 password
+      const payload = { name: form.name, email: form.email, status: form.status, roleCodes: form.roleCodes };
+      await updateUser(dialog.id, payload);
+    } else {
+      await createUser({ ...form });
+    }
     ElMessage.success('保存成功');
     dialog.visible = false;
     loadList();

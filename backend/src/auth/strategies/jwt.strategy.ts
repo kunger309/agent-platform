@@ -7,6 +7,9 @@ import { PrismaService } from '../../database/prisma.service';
 export interface JwtPayload {
   sub: string;
   username: string;
+  name?: string;
+  email?: string;
+  avatar?: string;
   isSuperAdmin: boolean;
   roles: string[];
   permissionCodes: string[];
@@ -41,6 +44,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     return {
       userId: payload.sub,
       username: payload.username,
+      name: payload.name,
+      email: payload.email,
+      avatar: payload.avatar,
       isSuperAdmin: payload.isSuperAdmin,
       roles: payload.roles,
       permissionCodes: payload.permissionCodes,

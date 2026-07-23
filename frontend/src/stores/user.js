@@ -3,8 +3,9 @@ import { ref, computed } from 'vue';
 import * as authApi from '@/api/auth';
 
 export const useUserStore = defineStore('user', () => {
-  const user = ref(null);
   const token = ref(localStorage.getItem('agent_platform_token') || '');
+  // ★ 启动时优先从 localStorage 读 user（避开 atob 边界）
+  const user = ref(authApi.getStoredUser() || authApi.getCurrentUser() || null);
 
   const isLoggedIn = computed(() => !!token.value && !!user.value);
   const isSuperAdmin = computed(() => user.value?.isSuperAdmin === true);
@@ -29,12 +30,20 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
-   * 从 token 恢复用户信息（页面刷新时）
+   * 从 token + localStorage 恢复用户信息（页面刷新时）
+   * - 同步，无副作用
    */
   function restoreFromToken() {
-    const restored = authApi.getCurrentUser();
+    // 优先用存的 user 对象（解析更快、更可靠）；其次从 token 解码
+    const stored = authApi.getStoredUser();
+    const fromToken = authApi.getCurrentUser();
+    const restored = stored || fromToken;
     if (restored) {
       user.value = restored;
+    } else if (token.value) {
+      // token 有但 user 解析不出来 → token 已过期或损坏
+      token.value = '';
+      user.value = null;
     }
   }
 

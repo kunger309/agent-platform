@@ -1,6 +1,9 @@
 <template>
-  <div class="dashboard">
-    <h2 class="page-title">工作台</h2>
+  <div class="dashboard page-container">
+    <div class="page-header">
+      <h2>工作台</h2>
+      <span class="welcome-hint">欢迎回来，{{ user.name || user.username }}</span>
+    </div>
     <el-row :gutter="16">
       <el-col :xs="24" :sm="12" :md="6" v-for="card in cards" :key="card.title">
         <el-card shadow="hover" class="metric-card">
@@ -37,8 +40,9 @@
           <template #header>
             <span><el-icon><User /></el-icon> 账号信息</span>
           </template>
-          <p><b>用户名</b>：{{ user.username }}</p>
-          <p><b>昵称</b>：{{ user.nickname || '-' }}</p>
+          <p><b>用户名</b>：{{ user.username || '-' }}</p>
+          <p><b>昵称</b>：{{ user.name || '-' }}</p>
+          <p><b>邮箱</b>：{{ user.email || '-' }}</p>
           <p><b>角色</b>：<el-tag v-for="r in user.roles" :key="r" type="success" size="small" style="margin-right: 6px">{{ r }}</el-tag></p>
           <p v-if="user.mustChangePassword">
             <el-tag type="danger">首登强制改密未完成</el-tag>
@@ -55,7 +59,7 @@ import { User, Document, ChatDotRound, Box, Reading } from '@element-plus/icons-
 import { useUserStore } from '@/stores/user';
 
 const userStore = useUserStore();
-const user = computed(() => userStore.profile || {});
+const user = computed(() => userStore.user || {});
 
 const cards = [
   { title: '智能体', value: 0, icon: ChatDotRound, color: '#409EFF' },
@@ -67,7 +71,7 @@ const cards = [
 
 <style scoped>
 .dashboard { padding: 0; }
-.page-title { margin: 0 0 16px; font-weight: 600; }
+.welcome-hint { color: #909399; font-size: 14px; }
 .metric-card {
   display: flex;
   align-items: center;

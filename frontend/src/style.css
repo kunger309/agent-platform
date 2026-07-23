@@ -1,79 +1,135 @@
+/* ============================================
+ * 全局基础样式 + 响应式断点（1080p / 2K / 4K）
+ * ============================================ */
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* 排版 */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
   line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  color-scheme: light;
+
+  /* 主题色（Element Plus 兼容） */
+  --el-color-primary: #409eff;
+  --brand-bg: #001529;
+  --brand-bg-2: #002140;
+  --content-bg: #f0f2f5;
+  --border-soft: #e8e8e8;
+
+  /* 布局变量（1080p 基线） */
+  --sidebar-width: 220px;
+  --topbar-height: 60px;
+  --content-max-width: 1400px;   /* 1920x1080 下左右各留 260px 边距 */
+  --chat-max-width: 760px;        /* 聊天消息气泡 */
+  --form-max-width: 720px;        /* 弹窗表单 */
+  --content-padding: 16px;
+  --radius-md: 8px;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+/* 2K（2560x1440） */
+@media (min-width: 2560px) {
+  :root {
+    --content-max-width: 1600px;
+    --chat-max-width: 880px;
+    --form-max-width: 820px;
+    --content-padding: 24px;
+  }
 }
 
-body {
+/* 4K（3840x2160） */
+@media (min-width: 3840px) {
+  :root {
+    --content-max-width: 2000px;
+    --chat-max-width: 1080px;
+    --form-max-width: 980px;
+    --content-padding: 32px;
+    font-size: 15px;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 1024px;
+  background: var(--content-bg);
+  color: #303133;
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  /* 覆盖 Vite 默认模板的 max-width 限制 */
+  max-width: none;
+  text-align: left;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+a { color: var(--el-color-primary); text-decoration: none; }
+a:hover { opacity: 0.85; }
+
+button { font-family: inherit; }
+
+/* ============================================
+ * 通用工具类
+ * ============================================ */
+
+/* 内容居中容器：所有列表/详情页用它包一层 */
+.page-container {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
 }
+
+/* 卡片容器 */
+.card-block {
+  background: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  padding: 20px;
+}
+
+/* 页面标题 */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.page-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+}
+
+/* 表格容器 */
+.table-card {
+  background: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  padding: 16px;
+}
+
+/* 分页/搜索栏 */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.toolbar .toolbar-left { display: flex; gap: 8px; align-items: center; }
+.toolbar .toolbar-right { display: flex; gap: 8px; align-items: center; }
+
+/* 滚动条美化（Webkit） */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #909399; }
+::-webkit-scrollbar-track { background: transparent; }

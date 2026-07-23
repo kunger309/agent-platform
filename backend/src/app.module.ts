@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
+import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OrganizationsModule } from './organizations/organizations.module';
@@ -8,6 +9,8 @@ import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { RbacModule } from './rbac/rbac.module';
 import { HealthModule } from './health/health.module';
+import { LlmModule } from './llm/llm.module';
+import { AgentsModule } from './agents/agents.module';
 
 @Module({
   imports: [
@@ -19,6 +22,7 @@ import { HealthModule } from './health/health.module';
 
     // 基础设施
     DatabaseModule,
+    CommonModule,
 
     // 业务模块
     AuthModule,
@@ -27,6 +31,8 @@ import { HealthModule } from './health/health.module';
     RolesModule,
     PermissionsModule,
     RbacModule,
+    LlmModule,
+    AgentsModule,
 
     // 系统
     HealthModule,

@@ -65,6 +65,9 @@ export class AuthService {
     const payload = {
       sub: user.id,
       username: user.username,
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar,
       isSuperAdmin: user.isSuperAdmin,
       roles,
       permissionCodes: Array.from(permissionCodes),
