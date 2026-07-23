@@ -1,5 +1,6 @@
-import { Controller, Post, Get, Body, Request } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Request, UseGuards } from '@nestjs/common';
 import { SkipAuth } from '../common/decorators/public.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -35,5 +36,16 @@ export class AuthController {
   @Post('logout')
   async logout() {
     return { success: true, message: 'Logged out' };
+  }
+
+  /** 当前用户修改自己的密码（个人中心） */
+  @UseGuards(JwtAuthGuard)
+  @Patch('change-password')
+  async changePassword(
+    @Request() req: any,
+    @Body() body: { oldPassword: string; newPassword: string },
+  ) {
+    await this.authService.changePassword(req.user.userId, body.oldPassword, body.newPassword);
+    return { success: true, message: 'Password changed' };
   }
 }

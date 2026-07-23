@@ -88,3 +88,10 @@ export const getStoredUser = () => {
     return null;
   }
 };
+
+/**
+ * 修改密码（个人中心）
+ * @param {{ oldPassword: string, newPassword: string }} payload
+ */
+export const changePassword = (payload) => client.patch('/auth/change-password', payload);
+

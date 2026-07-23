@@ -131,6 +131,8 @@ const saving = ref(false);
 const formRef = ref(null);
 
 const dialog = reactive({ visible: false, editing: false, title: '添加 Provider' });
+// 编辑时记录原 provider 的 id（避免保存时按名字反查，用户改了名字就 404）
+const editingId = ref(null);
 const form = reactive({
   name: '',
   providerType: 'MiniMax',
@@ -180,6 +182,7 @@ async function load() {
 }
 
 function openCreate() {
+  editingId.value = null;
   Object.assign(form, {
     name: '',
     providerType: 'MiniMax',
@@ -195,6 +198,7 @@ function openCreate() {
 }
 
 function openEdit(row) {
+  editingId.value = row.id; // ← 关键：保存原 id
   Object.assign(form, {
     name: row.name,
     providerType: row.providerType,
@@ -214,9 +218,18 @@ async function saveIt() {
   saving.value = true;
   try {
     if (dialog.editing) {
+      if (!editingId.value) {
+        // 兜底：万一没拿到 id，再按名字反查一次
+        const byName = list.value.find((p) => p.name === form.name);
+        if (!byName) {
+          ElMessage.error('无法定位原 Provider，请关闭后重试');
+          return;
+        }
+        editingId.value = byName.id;
+      }
       const payload = { ...form };
       if (!payload.apiKey) delete payload.apiKey; // 没填就不传
-      await updateProvider(list.value.find((p) => p.name === form.name)?.id || form.id, payload);
+      await updateProvider(editingId.value, payload);
     } else {
       await createProvider(form);
     }

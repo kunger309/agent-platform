@@ -1,10 +1,14 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { EncryptionService } from '../common/services/encryption.service';
+import { join } from 'path';
+import { readFile } from 'fs/promises';
 import {
   CreateLlmProviderDto,
   UpdateLlmProviderDto,
@@ -37,6 +41,8 @@ export class LlmService {
     private readonly encryption: EncryptionService,
     private readonly chatEngine: ChatEngine,
   ) {}
+
+  private readonly logger = new Logger(LlmService.name);
 
   /** 当前组织可用的 Provider 列表（API Key 仅回显末尾 4 位） */
   async list(organizationId: string) {
@@ -210,16 +216,67 @@ export class LlmService {
   }
 
   /**
-   * 通用对话（不绑定 Agent，用默认 Provider 直接聊）
-   * 返回 SSE 可读流
+   * 通用对话（不绑定 Agent，用默认 Provider 直接聊，支持会话持久化 + 文件上传）
+   * 返回 { stream, conversationId }，stream 是 SSE 可读流
    */
-  async chat(organizationId: string, message: string, history: Array<{ role: string; content: string }> = []) {
+  async chat(
+    organizationId: string,
+    userId: string,
+    message: string,
+    conversationId?: string,
+    attachments: { url: string; name: string; type: string; size: number }[] = [],
+  ) {
     const provider = await this.getDefault(organizationId);
     if (!provider) {
       const err: any = new Error('尚未配置可用的 LLM Provider');
       err.status = 400;
       throw err;
     }
+
+    // 1) 加载或创建 conversation（智能对话不绑 agent）
+    if (!conversationId) {
+      const conv = await this.prisma.conversation.create({
+        data: {
+          organizationId,
+          userId,
+          agentId: null,
+          title: message.slice(0, 30),
+          lastMessageAt: new Date(),
+        },
+      });
+      conversationId = conv.id;
+    } else {
+      const exists = await this.prisma.conversation.findFirst({
+        where: { id: conversationId, userId, agentId: null },
+      });
+      if (!exists) throw new ForbiddenException('无权访问该会话');
+    }
+
+    // 2) 先保存 user 消息（含附件元数据，必须在加载历史之前）
+    await this.prisma.message.create({
+      data: {
+        conversationId,
+        role: 'user',
+        content: message,
+        attachments: attachments.length ? (attachments as any) : undefined,
+      },
+    });
+
+    // 3) 加载历史（user 消息此时已在库中）
+    const msgs = await this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+      select: { role: true, content: true },
+    });
+
+    // 3.5) 把本次上传的附件构造成多模态 content（图片→base64；文档→文本提示）
+    //      仅作用于传给 LLM 的 history 最后一条，库里仍存纯文本 + attachments JSON
+    if (attachments.length) {
+      const multimodal = await this.buildUserContent(message, attachments);
+      (msgs[msgs.length - 1] as any).content = multimodal;
+    }
+
+    // 4) 创建 chatModel + 流式生成
     const llm = this.createChatModel({
       providerType: provider.providerType,
       baseUrl: provider.baseUrl,
@@ -227,14 +284,119 @@ export class LlmService {
       defaultModel: provider.defaultModel,
       models: provider.models,
     });
-    // 当前消息必须作为最后一条 user 消息加入历史（否则 MiniMax 等报 messages is empty）
-    const fullHistory = [
-      ...history.map((m) => ({
-        role: m.role as 'user' | 'assistant' | 'system',
-        content: m.content,
-      })),
-      { role: 'user' as const, content: message },
-    ];
-    return this.chatEngine.streamChat({ llm, history: fullHistory });
+    const { stream, getAccumulated } = await this.chatEngine.streamChat({
+      llm,
+      history: msgs as any,
+    });
+
+    // 5) 流结束后异步保存 assistant 消息 + 更新 lastMessageAt
+    //    注意：stream.on('end') 是异步 listener，必须 try-catch，
+    //    否则 unhandled promise rejection 会让 Node 进程崩溃。
+    //    常见 expected 错误：用户在流式期间 DELETE 了 conversation。
+    stream.on('end', () => {
+      void (async () => {
+        const fullText = getAccumulated();
+        if (!fullText) return;
+        try {
+          await this.prisma.message.create({
+            data: { conversationId, role: 'assistant', content: fullText },
+          });
+          await this.prisma.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: new Date() },
+          });
+        } catch (err: any) {
+          // P2025 (conversation not found) 是用户 DELETE 引发的正常并发，无需告警
+          if (err?.code === 'P2025') {
+            this.logger.debug(`conversation ${conversationId} was deleted during streaming, skip persist`);
+          } else {
+            this.logger.error(`[LlmService] failed to persist assistant message: ${err?.message}`);
+          }
+        }
+      })();
+    });
+
+    return { stream, conversationId };
+  }
+
+  /**
+   * 把用户上传的附件构造成 LLM 可理解的多模态 content
+   * - 图片：本地读盘 → base64 data URL（避免云端模型访问不了 localhost）
+   * - 文档：把文件名作为文本提示拼进 prompt
+   */
+  private async buildUserContent(
+    message: string,
+    attachments: { url: string; name: string; type: string; size: number }[],
+  ): Promise<string | any[]> {
+    const text = message?.trim() || '(用户上传了以下文件，请参考附件内容进行回复)';
+    const imageParts: any[] = [];
+    for (const a of attachments) {
+      if (a.type?.startsWith('image/')) {
+        try {
+          const fileName = a.url.split('/').pop();
+          if (!fileName) continue;
+          const filePath = join(process.cwd(), 'uploads', fileName);
+          const buf = await readFile(filePath);
+          const b64 = buf.toString('base64');
+          imageParts.push({
+            type: 'image_url',
+            image_url: { url: `data:${a.type};base64,${b64}` },
+          });
+        } catch (e: any) {
+          this.logger.warn(`读取图片附件失败 ${a.url}: ${e?.message}`);
+        }
+      }
+    }
+    if (imageParts.length) {
+      return [{ type: 'text', text }, ...imageParts];
+    }
+    // 无图片：把文档名作为文本上下文提示
+    const names = attachments.map((a) => a.name).join('、');
+    return `${text}\n\n[用户上传了文件：${names}]`;
+  }
+
+  /**
+   * 列出会话（智能对话专用：agentId IS NULL）
+   * 按 lastMessageAt desc 排序
+   */
+  async listConversations(userId: string, organizationId: string) {
+    return this.prisma.conversation.findMany({
+      where: { userId, organizationId, agentId: null },
+      orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        title: true,
+        lastMessageAt: true,
+        createdAt: true,
+      },
+      take: 50,
+    });
+  }
+
+  /**
+   * 获取会话历史消息
+   */
+  async getConversationMessages(conversationId: string, userId: string) {
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, userId, agentId: null },
+    });
+    if (!conv) throw new ForbiddenException('无权访问该会话');
+    return this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, role: true, content: true, createdAt: true },
+    });
+  }
+
+  /**
+   * 删除会话（级联删消息）
+   */
+  async deleteConversation(conversationId: string, userId: string) {
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, userId, agentId: null },
+    });
+    if (!conv) throw new ForbiddenException('无权访问该会话');
+    await this.prisma.conversation.delete({ where: { id: conversationId } });
+    return { success: true };
   }
 }

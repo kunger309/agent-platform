@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, HttpCode } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
@@ -13,8 +13,8 @@ export class UsersController {
 
   @Get()
   @RequirePermission('user:list')
-  async list(@Request() req) {
-    const users = await this.usersService.findAll(req.user);
+  async list(@Request() req, @Query() query) {
+    const users = await this.usersService.findAll(req.user, query);
     return { success: true, data: users };
   }
 

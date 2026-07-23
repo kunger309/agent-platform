@@ -109,7 +109,9 @@ async function loadList() {
 async function loadPerms() {
   try {
     const data = await listPermissions({ tree: true });
-    permTree.value = data?.tree || data || [];
+    // 后端返回 { menuTree, buttonList, apiList }，el-tree 需要数组 → 合并为扁平权限树
+    const d = data || {};
+    permTree.value = [...(d.menuTree || []), ...(d.buttonList || []), ...(d.apiList || [])];
   } catch (e) { permTree.value = []; }
 }
 
@@ -146,8 +148,8 @@ async function openPerm(row) {
   await loadPerms();
   // 选中已有权限（需要后端返回 role.permissions）
   setTimeout(() => {
-    if (permTreeRef.value && row.permissions) {
-      permTreeRef.value.setCheckedKeys(row.permissions);
+    if (permTreeRef.value && row.permissionCodes) {
+      permTreeRef.value.setCheckedKeys(row.permissionCodes);
     }
   }, 100);
 }

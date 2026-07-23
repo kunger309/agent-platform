@@ -1,13 +1,36 @@
 import { NestFactory, Reflector } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger, NestApplicationOptions } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
+import { join } from 'path';
+import { mkdirSync, existsSync } from 'fs';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 
+const bootLogger = new Logger('Bootstrap');
+
+// 上传目录（跟随启动 cwd，即 backend 根，编译/开发模式一致）
+const uploadsDir = join(process.cwd(), 'uploads');
+if (!existsSync(uploadsDir)) {
+  mkdirSync(uploadsDir, { recursive: true });
+}
+
+
+// 全局兜底：拦所有未捕获的异步异常，防止进程崩溃
+// 必须放在 bootstrap() 之前才能拦到 bootstrap 自身抛出的异常
+process.on('unhandledRejection', (reason: any) => {
+  bootLogger.error(`Unhandled Promise Rejection: ${reason?.message || reason}`);
+  if (reason?.stack) bootLogger.error(reason.stack);
+});
+process.on('uncaughtException', (err: any) => {
+  bootLogger.error(`Uncaught Exception: ${err?.message || err}`);
+  if (err?.stack) bootLogger.error(err.stack);
+});
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
 
@@ -47,6 +70,9 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
+
+  // 静态托管上传文件（图片/文档），供前端 <img src="/uploads/xxx"> 访问
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads' });
 
   await app.listen(port, '0.0.0.0');
 

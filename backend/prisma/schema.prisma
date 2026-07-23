@@ -102,13 +102,14 @@ model UserOrganization {
 // ============================================================
 
 model Role {
-  id          String   @id @default(cuid())
-  code        String   @unique // super_admin / admin / editor / viewer / 自定义
+  id          String     @id @default(cuid())
+  code        String     @unique // super_admin / admin / editor / viewer / 自定义
   name        String
   description String?
-  isBuiltin   Boolean  @default(false) @map("is_builtin")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  isBuiltin   Boolean    @default(false) @map("is_builtin")
+  dataScope   DataScope? @map("data_scope") // 角色默认数据范围（用户级可覆盖）
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
 
   rolePermissions RolePermission[]
   userRoles       UserRole[]
@@ -386,7 +387,7 @@ model DocumentChunk {
 model Conversation {
   id              String   @id @default(cuid())
   organizationId  String   @map("organization_id")
-  agentId         String   @map("agent_id")
+  agentId         String?  @map("agent_id")
   userId          String   @map("user_id")
   title           String   @default("New Conversation")
   status          String   @default("active") // active / archived
@@ -394,7 +395,7 @@ model Conversation {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agent    Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messages Message[]
   executions Execution[]
 
@@ -409,6 +410,7 @@ model Message {
   role           String   // user / assistant / system / tool
   content        String
   contentJson    Json?    @map("content_json")
+  attachments    Json?    @map("attachments")
   tokenUsage     Json?    @map("token_usage")
   runId          String?  @map("run_id")
   createdAt      DateTime @default(now()) @map("created_at")

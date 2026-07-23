@@ -1,22 +1,38 @@
 /**
- * 通用对话（不绑定 Agent，用默认 Provider）
+ * 通用对话（不绑定 Agent，用默认 Provider，支持会话持久化 + 文件上传）
  * @param {string} message 当前消息
- * @param {Array<{role:string,content:string}>} history 历史（不含当前这条）
- * @param {object} callbacks { onDelta, onDone, onError }
+ * @param {string} [conversationId] 可选；传入则复用会话
+ * @param {object} callbacks { onConversationId, onThinking, onDelta, onDone, onError }
+ * @param {File[]} [files] 可选；传入则改用 multipart/form-data 上传
  * @returns {AbortController}
  */
-export function chatStream(message, history = [], callbacks = {}) {
+import client from './client';
+
+export function chatStream(message, conversationId, callbacks = {}, files = []) {
   const controller = new AbortController();
   const token = localStorage.getItem('agent_platform_token');
 
+  let body;
+  let headers = {
+    Authorization: token ? `Bearer ${token}` : '',
+    Accept: 'text/event-stream',
+  };
+  if (files && files.length) {
+    // 带附件：multipart/form-data（浏览器自动设置 Content-Type + boundary）
+    const fd = new FormData();
+    fd.append('message', message);
+    if (conversationId) fd.append('conversationId', conversationId);
+    files.forEach((f) => fd.append('files', f));
+    body = fd;
+  } else {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify({ message, conversationId });
+  }
+
   fetch('/api/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: token ? `Bearer ${token}` : '',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify({ message, history }),
+    headers,
+    body,
     signal: controller.signal,
   })
     .then(async (res) => {
@@ -44,9 +60,18 @@ export function chatStream(message, history = [], callbacks = {}) {
           if (!json) continue;
           try {
             const data = JSON.parse(json);
-            if (data.delta !== undefined) callbacks.onDelta?.(data.delta);
-            else if (data.done) callbacks.onDone?.();
-            else if (data.error) callbacks.onError?.(data.error);
+            if (data.conversationId) {
+              callbacks.onConversationId?.(data.conversationId);
+            } else if (data.thinking) {
+              // 后端 keepalive 心跳：模型还在思考中
+              callbacks.onThinking?.();
+            } else if (data.delta !== undefined) {
+              callbacks.onDelta?.(data.delta);
+            } else if (data.done) {
+              callbacks.onDone?.();
+            } else if (data.error) {
+              callbacks.onError?.(data.error);
+            }
           } catch (_) {}
         }
       }
@@ -59,4 +84,19 @@ export function chatStream(message, history = [], callbacks = {}) {
     });
 
   return controller;
+}
+
+/** 列出当前用户的「智能对话」会话（client 已解包 data，直接返回数组） */
+export function listConversations() {
+  return client.get('/chat/conversations');
+}
+
+/** 获取某个会话的所有历史消息 */
+export function getConversationMessages(conversationId) {
+  return client.get(`/chat/conversations/${conversationId}/messages`);
+}
+
+/** 删除会话（级联删消息） */
+export function deleteConversation(conversationId) {
+  return client.delete(`/chat/conversations/${conversationId}`);
 }
