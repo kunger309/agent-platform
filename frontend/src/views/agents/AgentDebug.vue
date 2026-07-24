@@ -33,17 +33,17 @@
             </div>
             <div class="msg-bubble">
               <template v-for="(p, pi) in m.parts" :key="pi">
-                <details v-if="p.type === 'think'" class="think-block">
-                  <summary>
-                    <el-icon><MagicStick /></el-icon>
-                    <span>思考过程</span>
-                    <span class="think-len">({{ p.content.length }} 字)</span>
-                  </summary>
-                  <pre class="think-content">{{ p.content }}</pre>
-                </details>
-                <div v-else class="msg-text">{{ p.content }}</div>
+                <ThinkingBlock
+                  v-if="p.type === 'think'"
+                  :content="p.content"
+                  :streaming="m.isStreaming"
+                />
+                <MarkdownView
+                  v-else
+                  :content="p.content"
+                  :streaming="m.isStreaming && pi === m.parts.length - 1"
+                />
               </template>
-              <span v-if="m.isStreaming" class="cursor-blink">▍</span>
             </div>
           </div>
         </div>
@@ -88,6 +88,8 @@ import {
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { useChatStream } from '@/composables/useChatStream';
+import ThinkingBlock from '@/components/chat/ThinkingBlock.vue';
+import MarkdownView from '@/components/chat/MarkdownView.vue';
 
 const route = useRoute();
 const router = useRouter();

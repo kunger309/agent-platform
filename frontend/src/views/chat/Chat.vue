@@ -105,17 +105,6 @@
         </div>
 
         <div class="input-area">
-          <!-- typing indicator：流式期间给用户持续反馈 -->
-          <div v-if="streaming" class="typing-bar">
-            <span class="typing-dots"><span></span><span></span><span></span></span>
-            <span class="typing-text">
-              <template v-if="typingPhase === 'thinking'">AI 正在思考</template>
-              <template v-else>AI 正在输入</template>
-              <span v-if="typingElapsed >= 1">（{{ typingElapsed }}s）</span>…
-            </span>
-            <el-button type="warning" size="small" @click="abort" plain style="margin-left: auto">停止</el-button>
-          </div>
-
           <!-- 附件预览 -->
           <div v-if="attachedFiles.length" class="attach-preview">
             <div v-for="(f, fi) in attachedFiles" :key="fi" class="attach-chip">
@@ -155,7 +144,18 @@
                 @change="onFileChange"
               />
               <el-tag v-if="error" type="danger" size="small">{{ error }}</el-tag>
-              <el-button v-if="!streaming" type="primary" @click="send" :disabled="!canSend">发送</el-button>
+              <!-- 流式时：右侧改为停止图标按钮（圆形 plain + VideoPause 两个竖条，类 ChatGPT 方块停止） -->
+              <el-button
+                v-if="streaming"
+                :icon="VideoPause"
+                circle
+                type="warning"
+                plain
+                title="停止生成"
+                @click="abort"
+              />
+              <!-- 非流式时：发送按钮 -->
+              <el-button v-else type="primary" @click="send" :disabled="!canSend">发送</el-button>
             </div>
           </div>
         </div>
@@ -167,7 +167,7 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted } from 'vue';
 import {
-  Plus, Close, ChatDotRound, MagicStick, UploadFilled, Document,
+  Plus, Close, ChatDotRound, MagicStick, UploadFilled, Document, VideoPause,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -198,8 +198,6 @@ const loadingList = ref(false);
 const msgBox = ref(null);
 const fileInput = ref(null);
 const attachedFiles = ref([]);
-const typingPhase = ref('thinking');
-const typingElapsed = ref(0);
 let controller = null;
 let typingTimer = null;
 
@@ -266,8 +264,11 @@ function startTyper(msg) {
     if (cur.length < full.length) {
       msg.display = full.slice(0, Math.min(full.length, cur.length + STEP));
       typerTimer = setTimeout(tick, INTERVAL);
-    } else if (msg.phase === 'streaming') {
-      // 内容还没来全，但本段已显示完，稍后再看
+    } else if (msg.phase !== 'done') {
+      // 内容还没接收完（thinking / streaming 阶段，delta 尚未到达或本段已显示完），
+      // 继续等待下一波 delta。
+      // 注意：首帧 phase 是 'thinking'（delta 还没来），必须在这里继续 tick，
+      // 否则会误入 else 清空定时器，导致 display 永远停在 ''（最终由 onDone 一次性显示 = 无打字机）。
       typerTimer = setTimeout(tick, INTERVAL);
     } else {
       msg.display = full;
@@ -288,23 +289,30 @@ async function loadSessions() {
   loadingList.value = true;
   try {
     const list = await listConversations();
-    sessions.value = (list || []).map((c) => ({
+    const fresh = (list || []).map((c) => ({
       id: c.id,
       localId: c.id,
       title: c.title || '新对话',
       messages: [],
       lastMessageAt: c.lastMessageAt,
     }));
-    if (sessions.value.length === 0) {
+    // 保留当前激活会话的内存 messages，避免 loadSessions 把还在流式打字的消息“刷掉”。
+    // 仅在首次进入页面（无激活会话）或列表为空时才强制切换 activeKey。
+    const stillActive =
+      activeKey.value && fresh.some((c) => c.id === activeKey.value);
+    sessions.value = fresh;
+    if (fresh.length === 0) {
       newSession();
-    } else {
-      activeKey.value = sessions.value[0].id;
-      await loadMessages(sessions.value[0].id);
+    } else if (!stillActive && !activeKey.value) {
+      activeKey.value = fresh[0].id;
+      await loadMessages(fresh[0].id);
     }
   } catch (e) {
     ElMessage.error('加载会话列表失败：' + (e?.message || e));
-    sessions.value = [makeLocalSession()];
-    activeKey.value = sessions.value[0].localId;
+    if (sessions.value.length === 0) {
+      sessions.value = [makeLocalSession()];
+      activeKey.value = sessions.value[0].localId;
+    }
   } finally {
     loadingList.value = false;
   }
@@ -457,8 +465,6 @@ function send() {
   input.value = '';
   attachedFiles.value = [];
   streaming.value = true;
-  typingPhase.value = 'thinking';
-  typingElapsed.value = 0;
   error.value = null;
   nextTick(scrollToBottom);
 
@@ -470,11 +476,23 @@ function send() {
     {
       onConversationId: (cid) => {
         if (!session.id) {
+          // 不调 loadSessions() —— 后端给的 cid 就是当前会话的后端 id，
+          // 只需把本地会话升级为持久会话，保留正在流式 reveal 的 messages（避免被整个替换后“丢消息”）。
           session.id = cid;
           session.localId = cid;
-          loadSessions().then(() => {
-            activeKey.value = cid;
-          });
+          activeKey.value = cid;
+          // 侧边栏补一条：把这条新会话加到列表头（如果还没有）
+          const exists = sessions.value.some((x) => x.id === cid);
+          if (!exists) {
+            const stub = {
+              id: cid,
+              localId: cid,
+              title: session.title || '新对话',
+              messages: session.messages,
+              lastMessageAt: new Date().toISOString(),
+            };
+            sessions.value.unshift(stub);
+          }
         }
       },
       onThinking: () => {
@@ -484,7 +502,6 @@ function send() {
         aiMsg.content += d;
         if (aiMsg.phase === 'thinking') {
           aiMsg.phase = 'streaming';
-          typingPhase.value = 'streaming';
         }
         nextTick(scrollToBottom);
       },
@@ -495,7 +512,15 @@ function send() {
         streaming.value = false;
         stopTypingTimer();
         controller = null;
-        loadSessions();
+        // 只更新侧边栏对应会话的 lastMessageAt，不重拉整个会话列表（避免流式结束后“界面刷新”）
+        const s = sessions.value.find((x) => (x.id || x.localId) === conversationId);
+        if (s) s.lastMessageAt = new Date().toISOString();
+        // 持久化会话可能还没把 localId 升级为后端 id（极端时序），确保侧边栏可定位
+        if (session.id !== conversationId && conversationId) {
+          session.id = conversationId;
+          session.localId = conversationId;
+          activeKey.value = conversationId;
+        }
       },
       onError: (msg) => {
         aiMsg.content += `\n\n[错误] ${msg}`;
@@ -517,7 +542,6 @@ function startTypingTimer(aiMsg) {
   aiMsg.elapsed = 0;
   typingTimer = setInterval(() => {
     aiMsg.elapsed = (aiMsg.elapsed || 0) + 1;
-    typingElapsed.value = aiMsg.elapsed;
   }, 1000);
 }
 function stopTypingTimer() {
@@ -525,7 +549,6 @@ function stopTypingTimer() {
     clearInterval(typingTimer);
     typingTimer = null;
   }
-  typingElapsed.value = 0;
 }
 
 function abort() {
@@ -713,37 +736,6 @@ onMounted(() => {
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
-}
-
-/* typing bar: 流式期间底部状态条 */
-.typing-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  margin-bottom: 8px;
-  background: linear-gradient(90deg, #f5f7fa 0%, #eef5e9 100%);
-  border: 1px solid #e1e8d8;
-  border-radius: 8px;
-  font-size: 12px;
-  color: #606266;
-  animation: slideUp 0.2s ease-out;
-}
-.typing-dots { display: inline-flex; gap: 3px; }
-.typing-dots span {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: #67c23a;
-  display: inline-block;
-  animation: bounce 1.4s infinite ease-in-out both;
-}
-.typing-dots span:nth-child(1) { animation-delay: 0s; }
-.typing-dots span:nth-child(2) { animation-delay: 0.16s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.32s; }
-.typing-text { font-style: normal; }
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 /* 附件预览 chips */
