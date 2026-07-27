@@ -11,6 +11,8 @@ import { RbacModule } from './rbac/rbac.module';
 import { HealthModule } from './health/health.module';
 import { LlmModule } from './llm/llm.module';
 import { AgentsModule } from './agents/agents.module';
+import { WorkflowsModule } from './workflows/workflows.module';
+import { InternalModule } from './internal/internal.module';
 
 @Module({
   imports: [
@@ -33,6 +35,8 @@ import { AgentsModule } from './agents/agents.module';
     RbacModule,
     LlmModule,
     AgentsModule,
+    WorkflowsModule,
+    InternalModule,
 
     // 系统
     HealthModule,

@@ -20,6 +20,11 @@
             @click="switchSession(s)"
           >
             <el-icon class="session-icon"><ChatDotRound /></el-icon>
+            <span
+              class="mode-dot"
+              :class="s.workflowId ? 'dot-wf' : s.agentId ? 'dot-agent' : 'dot-llm'"
+              :title="s.workflowId ? '工作流对话' : s.agentId ? '智能体对话' : '纯 LLM 对话'"
+            ></span>
             <span class="session-title">{{ s.title || '新对话' }}</span>
             <el-icon class="session-del" @click.stop="removeSession(s)">
               <Close />
@@ -30,6 +35,26 @@
 
       <!-- 右侧对话区 -->
       <div class="chat-main">
+        <!-- 模式工具栏：显示当前是「纯 LLM」还是「工作流：xxx」，可一键切换 -->
+        <div class="chat-toolbar">
+          <div
+            class="mode-pill"
+            :class="{
+              'mode-pill-wf': activeSession?.workflowId,
+              'mode-pill-agent': activeSession?.agentId,
+            }"
+          >
+            <el-icon v-if="activeSession?.workflowId"><Connection /></el-icon>
+            <el-icon v-else-if="activeSession?.agentId"><MagicStick /></el-icon>
+            <el-icon v-else><ChatDotRound /></el-icon>
+            <span v-if="activeSession?.workflowId">工作流：{{ workflowName(activeSession.workflowId) }}</span>
+            <span v-else-if="activeSession?.agentId">智能体：{{ agentName(activeSession.agentId) }}</span>
+            <span v-else>纯 LLM 对话</span>
+          </div>
+          <el-button text :icon="Switch" @click="openWorkflowPicker" size="small">
+            切换模式
+          </el-button>
+        </div>
         <div
           class="messages"
           ref="msgBox"
@@ -39,7 +64,7 @@
           <div v-if="!activeSession || activeSession.messages.length === 0" class="empty">
             <el-icon size="56" color="#dcdfe6"><ChatDotRound /></el-icon>
             <p class="empty-title">开始一段新对话</p>
-            <p class="empty-hint">用默认 LLM Provider 直接聊，支持 Markdown 与文件上传</p>
+            <p class="empty-hint">用默认模型提供商直接聊，支持 Markdown 与文件上传</p>
           </div>
 
           <div
@@ -161,6 +186,69 @@
         </div>
       </div>
     </div>
+
+    <!-- 工作流选择器：可切换"纯 LLM"或某个已发布工作流 -->
+    <el-dialog
+      v-model="wfPickerOpen"
+      title="切换对话模式"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <el-radio-group v-model="wfPickerMode" class="wf-picker-mode">
+        <el-radio-button value="llm">纯 LLM 对话</el-radio-button>
+        <el-radio-button value="agent">智能体对话</el-radio-button>
+        <el-radio-button value="workflow">工作流对话</el-radio-button>
+      </el-radio-group>
+      <div v-if="wfPickerMode === 'workflow'" class="wf-picker-list">
+        <el-select
+          v-model="wfPickerSelected"
+          placeholder="选择已发布工作流"
+          style="width: 100%"
+          filterable
+          :loading="wfPickerLoading"
+        >
+          <el-option
+            v-for="w in publishedWorkflows"
+            :key="w.id"
+            :label="w.name"
+            :value="w.id"
+          >
+            <span style="float:left">{{ w.name }}</span>
+            <span style="float:right;color:#999;font-size:12px">v{{ w.version }}</span>
+          </el-option>
+        </el-select>
+        <p class="wf-picker-hint">仅显示「已发布」工作流。每个会话独立绑定一个工作流，新建对话会重置绑定。</p>
+      </div>
+      <div v-else-if="wfPickerMode === 'agent'" class="wf-picker-list">
+        <el-select
+          v-model="agentPickerSelected"
+          placeholder="选择已发布智能体"
+          style="width: 100%"
+          filterable
+          :loading="wfPickerLoading"
+        >
+          <el-option
+            v-for="a in publishedAgents"
+            :key="a.id"
+            :label="a.name"
+            :value="a.id"
+          >
+            <span style="float:left">{{ a.name }}</span>
+            <span style="float:right;color:#999;font-size:12px">{{ a.description || '' }}</span>
+          </el-option>
+        </el-select>
+        <p class="wf-picker-hint">仅显示「已发布」智能体。智能体自带角色设定（系统提示词 + 模型配置），支持多轮上下文；暂不支持附件上传。</p>
+      </div>
+      <p v-else class="wf-picker-hint">纯 LLM 模式：直接用默认 Provider 聊天，无工作流编排。</p>
+      <template #footer>
+        <el-button @click="wfPickerOpen = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="(wfPickerMode === 'workflow' && !wfPickerSelected) || (wfPickerMode === 'agent' && !agentPickerSelected)"
+          @click="confirmWorkflowPicker"
+        >确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -168,6 +256,7 @@
 import { ref, reactive, computed, nextTick, onMounted } from 'vue';
 import {
   Plus, Close, ChatDotRound, MagicStick, UploadFilled, Document, VideoPause,
+  Switch, Connection,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -176,6 +265,8 @@ import {
   getConversationMessages,
   deleteConversation,
 } from '@/api/chat';
+import { listWorkflows } from '@/api/workflows';
+import { listAgents, chatStream as agentChatStream } from '@/api/agent';
 import ThinkingBlock from '@/components/chat/ThinkingBlock.vue';
 import MarkdownView from '@/components/chat/MarkdownView.vue';
 
@@ -186,6 +277,8 @@ function makeLocalSession() {
     localId: `local-${++localCounter}`,
     title: '新对话',
     messages: [],
+    workflowId: null, // 绑工作流：非空时 send 会走工作流引擎
+    agentId: null, // 绑智能体：非空时 send 会走 /api/agents/{id}/chat
   };
 }
 
@@ -198,6 +291,16 @@ const loadingList = ref(false);
 const msgBox = ref(null);
 const fileInput = ref(null);
 const attachedFiles = ref([]);
+// ===== 工作流/智能体模式相关状态 =====
+const publishedWorkflows = ref([]); // 仅"已发布"工作流
+const workflowNames = ref({}); // id -> name（用于顶栏展示）
+const publishedAgents = ref([]); // 仅"已发布"chat 智能体
+const agentNames = ref({}); // id -> name（用于顶栏展示）
+const wfPickerOpen = ref(false);
+const wfPickerMode = ref('llm'); // 'llm' | 'agent' | 'workflow'
+const wfPickerSelected = ref('');
+const agentPickerSelected = ref('');
+const wfPickerLoading = ref(false);
 let controller = null;
 let typingTimer = null;
 
@@ -295,8 +398,12 @@ async function loadSessions() {
       title: c.title || '新对话',
       messages: [],
       lastMessageAt: c.lastMessageAt,
+      workflowId: c.workflowId || null, // 工作流模式对话的标记
+      agentId: c.agentId || null, // 智能体模式对话的标记
     }));
-    // 保留当前激活会话的内存 messages，避免 loadSessions 把还在流式打字的消息“刷掉”。
+    // 历史会话里有智能体对话时，懒加载一次智能体名字（用于顶栏展示）
+    if (fresh.some((c) => c.agentId)) ensureAgentNames();
+    // 保留当前激活会话的内存 messages，避免 loadSessions 把还在流式打字的消息"刷掉"。
     // 仅在首次进入页面（无激活会话）或列表为空时才强制切换 activeKey。
     const stillActive =
       activeKey.value && fresh.some((c) => c.id === activeKey.value);
@@ -361,6 +468,9 @@ function newSession() {
   activeKey.value = s.localId;
   input.value = '';
   attachedFiles.value = [];
+  // 切到新对话：默认"纯 LLM"模式；如需智能体/工作流模式再点切换
+  s.workflowId = null;
+  s.agentId = null;
 }
 
 async function removeSession(s) {
@@ -432,6 +542,12 @@ function send() {
   const session = activeSession.value;
   if (!session) return;
 
+  // 智能体模式暂不支持附件（后端 ChatDto 只收 message/conversationId）
+  if (session.agentId && attachedFiles.value.length > 0) {
+    ElMessage.warning('智能体模式暂不支持附件，请先移除附件或切换到纯 LLM 模式');
+    return;
+  }
+
   // 把附件整理成可显示结构（发送前先存本地展示用）
   const pendingAttachments = attachedFiles.value.map((f) => ({
     name: f.name,
@@ -470,14 +586,12 @@ function send() {
 
   startTypingTimer(aiMsg);
 
-  controller = chatStream(
-    text,
-    conversationId,
-    {
+  // 三种模式共用同一套 SSE 回调（打字机 / thinking / 会话升级逻辑完全一致）
+  const sseCallbacks = {
       onConversationId: (cid) => {
         if (!session.id) {
           // 不调 loadSessions() —— 后端给的 cid 就是当前会话的后端 id，
-          // 只需把本地会话升级为持久会话，保留正在流式 reveal 的 messages（避免被整个替换后“丢消息”）。
+          // 只需把本地会话升级为持久会话，保留正在流式 reveal 的 messages（避免被整个替换后"丢消息"）。
           session.id = cid;
           session.localId = cid;
           activeKey.value = cid;
@@ -490,6 +604,8 @@ function send() {
               title: session.title || '新对话',
               messages: session.messages,
               lastMessageAt: new Date().toISOString(),
+              workflowId: session.workflowId || null,
+              agentId: session.agentId || null,
             };
             sessions.value.unshift(stub);
           }
@@ -512,7 +628,7 @@ function send() {
         streaming.value = false;
         stopTypingTimer();
         controller = null;
-        // 只更新侧边栏对应会话的 lastMessageAt，不重拉整个会话列表（避免流式结束后“界面刷新”）
+        // 只更新侧边栏对应会话的 lastMessageAt，不重拉整个会话列表（避免流式结束后"界面刷新"）
         const s = sessions.value.find((x) => (x.id || x.localId) === conversationId);
         if (s) s.lastMessageAt = new Date().toISOString();
         // 持久化会话可能还没把 localId 升级为后端 id（极端时序），确保侧边栏可定位
@@ -532,9 +648,25 @@ function send() {
         controller = null;
         error.value = msg;
       },
-    },
-    filePayload,
-  );
+  };
+
+  if (session.agentId) {
+    // 智能体模式：走 /api/agents/{id}/chat（后端按 agent 的 systemPrompt + modelConfig 调 LLM，多轮上下文）
+    controller = agentChatStream(
+      session.agentId,
+      { message: text, conversationId: conversationId || undefined },
+      sseCallbacks,
+    );
+  } else {
+    // 纯 LLM / 工作流模式：走 /api/chat
+    controller = chatStream(
+      text,
+      conversationId,
+      sseCallbacks,
+      filePayload,
+      session.workflowId || '', // 工作流模式：把当前会话绑定的 workflowId 传后端
+    );
+  }
 }
 
 function startTypingTimer(aiMsg) {
@@ -572,6 +704,101 @@ function scrollToBottom() {
   if (el) el.scrollTop = el.scrollHeight;
 }
 
+/* ===== 模式切换（纯 LLM / 智能体 / 工作流） ===== */
+function workflowName(id) {
+  return workflowNames.value[id] || id;
+}
+function agentName(id) {
+  return agentNames.value[id] || id;
+}
+
+// 懒加载智能体列表并建 id->name 索引（顶栏 pill 与选择器共用）
+let agentNamesLoaded = false;
+async function ensureAgentNames() {
+  if (agentNamesLoaded) return;
+  agentNamesLoaded = true;
+  try {
+    const list = await listAgents();
+    const published = (list || []).filter(
+      (a) => a.status === 'published' && (!a.type || a.type === 'chat'),
+    );
+    publishedAgents.value = published;
+    // 名字索引对所有 agent 建（历史会话可能绑了已下架的 agent，也要能显示名字）
+    for (const a of list || []) agentNames.value[a.id] = a.name;
+  } catch (e) {
+    agentNamesLoaded = false; // 失败允许重试
+    ElMessage.error('加载智能体列表失败：' + (e?.message || e));
+  }
+}
+
+async function openWorkflowPicker() {
+  // 打开弹窗：并行拉工作流 + 智能体列表（各自只拉一次）
+  wfPickerLoading.value = true;
+  try {
+    const tasks = [ensureAgentNames()];
+    if (publishedWorkflows.value.length === 0) {
+      tasks.push(
+        listWorkflows().then((list) => {
+          const published = (list || []).filter((w) => w.status === 'published');
+          publishedWorkflows.value = published;
+          for (const w of published) workflowNames.value[w.id] = w.name;
+        }),
+      );
+    }
+    await Promise.all(tasks);
+  } catch (e) {
+    ElMessage.error('加载列表失败：' + (e?.message || e));
+  } finally {
+    wfPickerLoading.value = false;
+  }
+  // 预填当前选择
+  const s = activeSession.value;
+  if (s?.workflowId) {
+    wfPickerMode.value = 'workflow';
+    wfPickerSelected.value = s.workflowId;
+  } else if (s?.agentId) {
+    wfPickerMode.value = 'agent';
+    agentPickerSelected.value = s.agentId;
+  } else {
+    wfPickerMode.value = 'llm';
+    wfPickerSelected.value = '';
+    agentPickerSelected.value = '';
+  }
+  wfPickerOpen.value = true;
+}
+
+async function confirmWorkflowPicker() {
+  const session = activeSession.value;
+  if (!session) return;
+  // 流式期间禁止切换（会丢消息）
+  if (streaming.value) {
+    ElMessage.warning('生成中无法切换，请先停止');
+    return;
+  }
+  const targetWfId = wfPickerMode.value === 'workflow' ? wfPickerSelected.value : null;
+  const targetAgentId = wfPickerMode.value === 'agent' ? agentPickerSelected.value : null;
+  // 切换模式视为"开新对话"：清空当前 messages（避免跨模式串味）
+  if (session.workflowId !== targetWfId || session.agentId !== targetAgentId) {
+    session.workflowId = targetWfId;
+    session.agentId = targetAgentId;
+    session.messages = []; // 清空消息
+    session.id = null; // 标记为新会话（让后端创建新的 conversation）
+    session.localId = session.localId.includes('local-') ? session.localId : `local-${++localCounter}`;
+    activeKey.value = session.localId;
+    // 调整会话标题
+    if (targetWfId) {
+      session.title = `工作流：${workflowName(targetWfId)}`;
+    } else if (targetAgentId) {
+      session.title = `智能体：${agentName(targetAgentId)}`;
+    } else {
+      session.title = '新对话';
+    }
+    input.value = '';
+    attachedFiles.value = [];
+  }
+  wfPickerOpen.value = false;
+}
+
 onMounted(() => {
   loadSessions();
 });
@@ -588,6 +815,61 @@ onMounted(() => {
   border-radius: var(--radius-md);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
   overflow: hidden;
+}
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafbfc;
+}
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.mode-pill.mode-pill-wf {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+.mode-pill.mode-pill-agent {
+  background: #f5f0ff;
+  color: #722ed1;
+}
+/* 会话列表三色模式点：绿=纯 LLM，紫=智能体，蓝=工作流 */
+.mode-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.dot-llm { background: #67c23a; }
+.dot-agent { background: #722ed1; }
+.dot-wf { background: #409eff; }
+.wf-picker-mode {
+  display: flex;
+  margin-bottom: 16px;
+  width: 100%;
+}
+.wf-picker-mode :deep(.el-radio-button__inner) {
+  width: 100%;
+}
+.wf-picker-list {
+  margin-top: 4px;
+}
+.wf-picker-hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #999;
+  line-height: 1.6;
 }
 .chat-side {
   width: 240px;

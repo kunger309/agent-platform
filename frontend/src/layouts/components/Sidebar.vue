@@ -35,9 +35,7 @@ const activeMenu = computed(() => route.path);
   <div class="sidebar">
     <div class="logo">
       <div class="logo-mark">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1.27A7 7 0 0 1 14 22v-1a1 1 0 0 1-1-1v-1.27A7 7 0 0 1 8 14H6a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5 2.5 2.5 0 0 0-2.5-2.5z"/>
-        </svg>
+        <img src="/logo.svg" alt="logo" class="logo-img" />
       </div>
       <div class="logo-text">
         <div class="logo-title">AI Agent</div>
@@ -95,16 +93,17 @@ const activeMenu = computed(() => route.path);
   flex-shrink: 0;
 }
 .logo-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  width: 88px;
+  height: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: #fff;
-  flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.4);
+}
+.logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
 }
 .logo-text { display: flex; flex-direction: column; line-height: 1.2; }
 .logo-title { font-size: 15px; font-weight: 600; }

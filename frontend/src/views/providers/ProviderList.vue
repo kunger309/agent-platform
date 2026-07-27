@@ -1,8 +1,8 @@
 <template>
   <div class="provider-list page-container">
     <div class="page-header">
-      <h2>模型配置（LLM Providers）</h2>
-      <el-button type="primary" :icon="Plus" @click="openCreate">添加 Provider</el-button>
+      <h2>模型提供商</h2>
+      <el-button type="primary" :icon="Plus" @click="openCreate">添加模型提供商</el-button>
     </div>
 
     <div class="table-card">

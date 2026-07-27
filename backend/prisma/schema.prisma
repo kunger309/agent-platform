@@ -388,6 +388,7 @@ model Conversation {
   id              String   @id @default(cuid())
   organizationId  String   @map("organization_id")
   agentId         String?  @map("agent_id")
+  workflowId      String?  @map("workflow_id") // 绑工作流对话：每次 send 走工作流引擎
   userId          String   @map("user_id")
   title           String   @default("New Conversation")
   status          String   @default("active") // active / archived
@@ -396,11 +397,13 @@ model Conversation {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   agent    Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workflow Workflow? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
   messages Message[]
   executions Execution[]
 
   @@index([userId, lastMessageAt])
   @@index([agentId])
+  @@index([workflowId])
   @@map("conversations")
 }
 
@@ -446,6 +449,7 @@ model Workflow {
 
   agent      Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
   executions Execution[]
+  conversations Conversation[]
 
   @@index([organizationId])
   @@map("workflows")

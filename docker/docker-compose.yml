@@ -59,7 +59,11 @@ services:
       - qdrant_data:/qdrant/storage
       - ./qdrant/config.yaml:/qdrant/config/config.yaml:ro
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:6333/readyz']
+      # qdrant/qdrant:latest (Debian) 镜像不含 wget/curl，原健康检查恒失败 → 误报 unhealthy
+      # 改用 bash 内置 /dev/tcp 真正探测 HTTP /readyz（仅依赖镜像内存在的 bash）
+      test:
+        - CMD-SHELL
+        - "bash -c 'exec 3<>/dev/tcp/localhost/6333; printf \"GET /readyz HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; IFS= read -r line <&3; case \"$$line\" in *200*) exit 0;; *) exit 1;; esac'"
       interval: 15s
       timeout: 5s
       retries: 5

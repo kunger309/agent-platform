@@ -1,0 +1,89 @@
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "llm",
+      "data": {
+        "label": "意图分类",
+        "config": {
+          "systemPrompt": "你是电商客服意图分类器，请只输出一个类别词。",
+          "promptTemplate": "把下面用户问题归类到以下之一，只输出类别词本身（不要解释、不要标点）：\n售后 / 售前 / 技术 / 账单 / 投诉\n\n用户问题：{{input}}"
+        }
+      }
+    },
+    {
+      "id": "n2",
+      "type": "condition",
+      "data": {
+        "label": "是否售后",
+        "config": { "variable": "variables.n1.output", "operator": "contains", "value": "售后" }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "condition",
+      "data": {
+        "label": "是否技术",
+        "config": { "variable": "variables.n1.output", "operator": "contains", "value": "技术" }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "llm",
+      "data": {
+        "label": "售后话术",
+        "config": {
+          "systemPrompt": "你是售后客服专家。",
+          "promptTemplate": "用户的问题是售后代办事项：{{input}}\n请给出退换货 / 维修的明确处理步骤，语气友好、分点说明。"
+        }
+      }
+    },
+    {
+      "id": "n3a",
+      "type": "answer",
+      "data": { "label": "售后回复", "config": { "template": "{{n3.output}}" } }
+    },
+    {
+      "id": "n5",
+      "type": "llm",
+      "data": {
+        "label": "技术话术",
+        "config": {
+          "systemPrompt": "你是技术支持工程师。",
+          "promptTemplate": "用户的问题是技术类：{{input}}\n请给出可操作的排查步骤，分点列出。"
+        }
+      }
+    },
+    {
+      "id": "n5a",
+      "type": "answer",
+      "data": { "label": "技术回复", "config": { "template": "{{n5.output}}" } }
+    },
+    {
+      "id": "n6",
+      "type": "llm",
+      "data": {
+        "label": "通用话术",
+        "config": {
+          "systemPrompt": "你是通用客服，礼貌专业。",
+          "promptTemplate": "友好回应用户的问题：{{input}}"
+        }
+      }
+    },
+    {
+      "id": "n6a",
+      "type": "answer",
+      "data": { "label": "通用回复", "config": { "template": "{{n6.output}}" } }
+    }
+  ],
+  "edges": [
+    { "source": "n1", "target": "n2" },
+    { "source": "n2", "target": "n3", "sourceHandle": "true" },
+    { "source": "n2", "target": "n4", "sourceHandle": "false" },
+    { "source": "n4", "target": "n5", "sourceHandle": "true" },
+    { "source": "n4", "target": "n6", "sourceHandle": "false" },
+    { "source": "n3", "target": "n3a" },
+    { "source": "n5", "target": "n5a" },
+    { "source": "n6", "target": "n6a" }
+  ]
+}

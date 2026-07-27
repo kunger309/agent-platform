@@ -78,6 +78,23 @@ const routes = [
     meta: { requiresAuth: true, permission: 'provider:list', title: '模型配置', icon: 'Connection' },
   },
 
+  // 工作流（LangGraph 可视化编排）
+  {
+    path: '/workflows',
+    component: () => import('@/views/workflow/WorkflowList.vue'),
+    meta: { requiresAuth: true, permission: 'workflow:list', title: '工作流', icon: 'Share' },
+  },
+  {
+    path: '/workflows/:id/edit',
+    component: () => import('@/views/workflow/WorkflowEditor.vue'),
+    meta: { requiresAuth: true, permission: 'workflow:edit', title: '编排工作流', hideInMenu: true },
+  },
+  {
+    path: '/workflows/:id/debug',
+    component: () => import('@/views/workflow/WorkflowDebug.vue'),
+    meta: { requiresAuth: true, permission: 'workflow:run', title: '调试工作流', hideInMenu: true },
+  },
+
   // 个人中心
   {
     path: '/profile',

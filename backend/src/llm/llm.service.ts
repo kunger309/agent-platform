@@ -228,7 +228,7 @@ export class LlmService {
   ) {
     const provider = await this.getDefault(organizationId);
     if (!provider) {
-      const err: any = new Error('尚未配置可用的 LLM Provider');
+      const err: any = new Error('尚未配置可用的模型提供商');
       err.status = 400;
       throw err;
     }
@@ -360,14 +360,18 @@ export class LlmService {
    * 按 lastMessageAt desc 排序
    */
   async listConversations(userId: string, organizationId: string) {
+    // 不再过滤 agentId：智能对话页统一展示三种模式的会话
+    // （纯 LLM：agentId/workflowId 均空；智能体：agentId 非空；工作流：workflowId 非空）
     return this.prisma.conversation.findMany({
-      where: { userId, organizationId, agentId: null },
+      where: { userId, organizationId },
       orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
       select: {
         id: true,
         title: true,
         lastMessageAt: true,
         createdAt: true,
+        workflowId: true, // 工作流模式对话会带这个字段
+        agentId: true, // 智能体模式对话会带这个字段
       },
       take: 50,
     });
@@ -378,7 +382,7 @@ export class LlmService {
    */
   async getConversationMessages(conversationId: string, userId: string) {
     const conv = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, userId, agentId: null },
+      where: { id: conversationId, userId },
     });
     if (!conv) throw new ForbiddenException('无权访问该会话');
     return this.prisma.message.findMany({
@@ -393,7 +397,7 @@ export class LlmService {
    */
   async deleteConversation(conversationId: string, userId: string) {
     const conv = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, userId, agentId: null },
+      where: { id: conversationId, userId },
     });
     if (!conv) throw new ForbiddenException('无权访问该会话');
     await this.prisma.conversation.delete({ where: { id: conversationId } });

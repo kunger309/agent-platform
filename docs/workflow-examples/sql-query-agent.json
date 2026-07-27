@@ -1,0 +1,60 @@
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "llm",
+      "data": {
+        "label": "生成 SQL",
+        "config": {
+          "systemPrompt": "你是 PostgreSQL SQL 专家，只生成只读 SELECT 语句。",
+          "promptTemplate": "根据下面的数据库 schema 和用户问题，生成一条只读 SELECT 语句（PostgreSQL 语法）。\n只输出 SQL，不要解释，不要用 markdown 代码块。\n\nSchema（只读业务表）：\n- users(id, username, name, email, status, is_super_admin, last_login_at, created_at)\n- agents(id, name, type, status, creator_id, organization_id, created_at)\n- workflows(id, name, status, version, creator_id, organization_id, created_at)\n- conversations(id, title, status, user_id, workflow_id, agent_id, last_message_at, created_at)\n- messages(id, conversation_id, role, content, created_at)\n- executions(id, status, workflow_id, agent_id, user_id, started_at, finished_at, duration_ms, created_at)\n- llm_providers(id, name, provider_type, default_model, is_default, status)\n\n规则：\n1) 必须以 SELECT 开头；\n2) 只能查询上面列出的表；\n3) 不要包含分号结尾的多语句；\n4) 使用 count / sum / avg 等聚合函数做统计；\n5) 输出最长 200 字符。\n\n用户问题：{{input}}"
+        }
+      }
+    },
+    {
+      "id": "n2",
+      "type": "code",
+      "data": {
+        "label": "清洗 SQL",
+        "config": {
+          "code": "// 去掉模型偶尔输出的 markdown 代码块围栏\nlet s = String(output || '');\ns = s.replace(/```[a-zA-Z]*\\n?/g, '').replace(/```/g, '').trim();\nreturn s;"
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "http",
+      "data": {
+        "label": "查询数据库",
+        "config": {
+          "method": "POST",
+          "url": "http://localhost:3000/api/internal/sql/query",
+          "headers": { "Content-Type": "application/json" },
+          "bodyTemplate": "{\"sql\":\"{{n2.output}}\"}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "llm",
+      "data": {
+        "label": "格式化回答",
+        "config": {
+          "systemPrompt": "你是数据分析助手，把查询结果转成自然语言。",
+          "promptTemplate": "数据库查询返回结果（JSON）：\n{{n3.output}}\n\n用户原始问题：{{input}}\n请用简洁中文回答用户。如查询报错，请直接告知错误信息。"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "answer",
+      "data": { "label": "最终回答", "config": { "template": "{{n4.output}}" } }
+    }
+  ],
+  "edges": [
+    { "source": "n1", "target": "n2" },
+    { "source": "n2", "target": "n3" },
+    { "source": "n3", "target": "n4" },
+    { "source": "n4", "target": "n5" }
+  ]
+}

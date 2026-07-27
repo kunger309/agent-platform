@@ -55,6 +55,9 @@ export function chatStream(agentId, payload, callbacks = {}) {
             const data = JSON.parse(json);
             if (data.conversationId) {
               callbacks.onConversationId?.(data.conversationId);
+            } else if (data.thinking) {
+              // 后端 keepalive 心跳：模型还在思考中
+              callbacks.onThinking?.();
             } else if (data.delta !== undefined) {
               callbacks.onDelta?.(data.delta);
             } else if (data.done) {

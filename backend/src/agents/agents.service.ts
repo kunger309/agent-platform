@@ -46,7 +46,7 @@ export class AgentsService {
     const provider = await this.prisma.llmProvider.findFirst({
       where: { id: dto.modelConfig.providerId, organizationId },
     });
-    if (!provider) throw new NotFoundException('指定的 LLM Provider 不存在或无权访问');
+    if (!provider) throw new NotFoundException('指定的模型提供商不存在或无权访问');
 
     return this.prisma.agent.create({
       data: {
@@ -66,6 +66,7 @@ export class AgentsService {
     const existing = await this.detail(id, organizationId);
     const data: any = {};
     if (dto.name !== undefined) data.name = dto.name;
+    if (dto.type !== undefined) data.type = dto.type;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.systemPrompt !== undefined) data.systemPrompt = dto.systemPrompt;
     if (dto.modelConfig !== undefined) data.modelConfig = dto.modelConfig;
@@ -93,7 +94,7 @@ export class AgentsService {
     if (!agent) throw new NotFoundException('Agent 不存在');
 
     const config = (agent.modelConfig as any) || {};
-    if (!config.providerId) throw new ForbiddenException('Agent 未配置 LLM Provider');
+    if (!config.providerId) throw new ForbiddenException('Agent 未配置模型提供商');
 
     const provider = await this.llm.getDecrypted(config.providerId);
     const chatModel = this.llm.createChatModel(
@@ -116,12 +117,14 @@ export class AgentsService {
           userId: currentUser.userId,
           organizationId: currentUser.currentOrgId,
           title: dto.message.slice(0, 30),
+          lastMessageAt: new Date(),
         },
       });
       conversationId = conv.id;
     } else {
+      // 复用会话时必须归属同一 agent，防止把 A 智能体的历史喂给 B
       const exists = await this.prisma.conversation.findFirst({
-        where: { id: conversationId, userId: currentUser.userId },
+        where: { id: conversationId, userId: currentUser.userId, agentId },
       });
       if (!exists) throw new ForbiddenException('无权访问该会话');
     }
@@ -150,17 +153,30 @@ export class AgentsService {
     });
 
     // 5) 异步保存 assistant 消息（流结束后）
-    stream.on('end', async () => {
-      const fullText = getAccumulated();
-      if (fullText) {
-        await this.prisma.message.create({
-          data: {
-            conversationId,
-            role: 'assistant',
-            content: fullText,
-          },
-        });
-      }
+    //    注意：用户可能在流式期间并发删除 conversation → P2025，必须吞掉避免进程崩溃
+    stream.on('end', () => {
+      void (async () => {
+        try {
+          const fullText = getAccumulated();
+          if (fullText) {
+            await this.prisma.message.create({
+              data: {
+                conversationId,
+                role: 'assistant',
+                content: fullText,
+              },
+            });
+          }
+          await this.prisma.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: new Date() },
+          });
+        } catch (err: any) {
+          if (err?.code !== 'P2025') {
+            console.error('[AgentsService] persist assistant message failed:', err?.message);
+          }
+        }
+      })();
     });
 
     return { stream, conversationId };

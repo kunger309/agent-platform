@@ -22,10 +22,24 @@
       <el-table-column prop="updatedAt" label="更新时间" width="180">
         <template #default="{ row }">{{ formatTime(row.updatedAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="240" fixed="right">
+      <el-table-column label="操作" width="320" fixed="right">
         <template #default="{ row }">
           <el-button size="small" type="primary" @click="goDebug(row)">调试</el-button>
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
+          <el-tooltip :content="publishHint(row) || '点击切换为草稿'" placement="top" :disabled="row.status !== 'published' && publishHint(row) !== ''">
+            <el-button
+              v-if="row.status !== 'published'"
+              size="small"
+              type="success"
+              :disabled="publishHint(row) !== ''"
+              @click="publishIt(row, true)"
+            >发布</el-button>
+            <el-button
+              v-else
+              size="small"
+              @click="publishIt(row, false)"
+            >取消发布</el-button>
+          </el-tooltip>
           <el-popconfirm title="确认删除？" @confirm="removeIt(row)">
             <template #reference>
               <el-button size="small" type="danger">删除</el-button>
@@ -51,8 +65,8 @@
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="2" />
         </el-form-item>
-        <el-form-item label="LLM Provider" prop="providerId">
-          <el-select v-model="form.providerId" placeholder="选择已配置的 Provider" style="width: 100%" @change="onProviderChange">
+        <el-form-item label="模型提供商" prop="providerId">
+          <el-select v-model="form.providerId" placeholder="选择已配置的模型提供商" style="width: 100%" @change="onProviderChange">
             <el-option
               v-for="p in providers"
               :key="p.id"
@@ -87,7 +101,7 @@ import { useRouter } from 'vue-router';
 import { Plus } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { listProviders, PROVIDER_TYPES } from '@/api/provider';
-import { listAgents, createAgent, updateAgent, deleteAgent } from '@/api/agent';
+import { listAgents, getAgent, createAgent, updateAgent, deleteAgent } from '@/api/agent';
 
 const router = useRouter();
 const list = ref([]);
@@ -110,13 +124,16 @@ const form = reactive({
 const rules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
-  providerId: [{ required: true, message: '请选择 LLM Provider', trigger: 'change' }],
+  providerId: [{ required: true, message: '请选择模型提供商', trigger: 'change' }],
   model: [{ required: true, message: '请选择模型', trigger: 'change' }],
 };
 
 const availableModels = computed(() => {
   const p = providers.value.find((x) => x.id === form.providerId);
-  return p?.models || [];
+  const models = [...(p?.models || [])];
+  // Provider 后续删改模型时，仍保留当前智能体已保存的模型，避免编辑时空白。
+  if (form.model && !models.includes(form.model)) models.unshift(form.model);
+  return models;
 });
 
 function providerLabel(type) {
@@ -137,6 +154,10 @@ async function load() {
   loading.value = true;
   try {
     [list.value, providers.value] = await Promise.all([listAgents(), listProviders()]);
+    // 异步为每个草稿智能体检查发布条件（不阻塞列表渲染）
+    for (const row of list.value) {
+      if (row.status !== 'published') refreshPublishReady(row);
+    }
   } finally {
     loading.value = false;
   }
@@ -163,20 +184,31 @@ function openCreate() {
   dialog.visible = true;
 }
 
-function openEdit(row) {
-  Object.assign(form, {
-    name: row.name,
-    type: row.type,
-    description: row.description || '',
-    providerId: row.modelConfig?.providerId || '',
-    model: row.modelConfig?.model || '',
-    systemPrompt: row.systemPrompt || '',
-    temperature: row.modelConfig?.temperature ?? 0.7,
-  });
+async function openEdit(row) {
   dialog.editing = true;
   dialog.id = row.id;
   dialog.title = `编辑 ${row.name}`;
   dialog.visible = true;
+
+  try {
+    // 列表接口只返回摘要字段，编辑必须读取详情才能回显模型配置和系统提示词。
+    const detail = await getAgent(row.id);
+    const config = detail?.modelConfig && typeof detail.modelConfig === 'object'
+      ? detail.modelConfig
+      : {};
+    Object.assign(form, {
+      name: detail.name ?? row.name ?? '',
+      type: detail.type ?? row.type ?? 'chat',
+      description: detail.description ?? row.description ?? '',
+      providerId: config.providerId ?? '',
+      model: config.model ?? '',
+      systemPrompt: detail.systemPrompt ?? '',
+      temperature: typeof config.temperature === 'number' ? config.temperature : 0.7,
+    });
+  } catch (error) {
+    dialog.visible = false;
+    ElMessage.error(`加载智能体详情失败：${error?.message || error}`);
+  }
 }
 
 async function saveIt() {
@@ -211,6 +243,48 @@ async function removeIt(row) {
   await deleteAgent(row.id);
   ElMessage.success('已删除');
   await load();
+}
+
+// 发布校验：列表行不携带 modelConfig / systemPrompt，
+// 这里只做基于列表行可见字段的粗校验（名称）。最终校验在 publishIt 内异步重新拉详情。
+const publishReady = ref({}); // id -> {ok, reason}
+
+async function refreshPublishReady(row) {
+  try {
+    const detail = await getAgent(row.id);
+    const cfg = detail?.modelConfig && typeof detail.modelConfig === 'object' ? detail.modelConfig : {};
+    const reasons = [];
+    if (!detail?.name) reasons.push('名称');
+    if (!cfg.providerId) reasons.push('Provider');
+    if (!cfg.model) reasons.push('模型');
+    publishReady.value[row.id] = reasons.length
+      ? { ok: false, reason: `需补充：${reasons.join('、')}` }
+      : { ok: true, reason: '' };
+  } catch (e) {
+    publishReady.value[row.id] = { ok: false, reason: '校验失败' };
+  }
+}
+
+function publishHint(row) {
+  return publishReady.value[row.id]?.reason || '';
+}
+
+async function publishIt(row, toPublish) {
+  if (toPublish && !publishReady.value[row.id]?.ok) {
+    // 兜底再校验一次，避免初次加载未完成时漏掉
+    await refreshPublishReady(row);
+    if (!publishReady.value[row.id]?.ok) {
+      ElMessage.warning(publishReady.value[row.id]?.reason || '请先补全配置');
+      return;
+    }
+  }
+  try {
+    await updateAgent(row.id, { status: toPublish ? 'published' : 'draft' });
+    ElMessage.success(toPublish ? '已发布' : '已取消发布');
+    await load();
+  } catch (e) {
+    ElMessage.error('操作失败：' + (e?.message || e));
+  }
 }
 
 function goDebug(row) {

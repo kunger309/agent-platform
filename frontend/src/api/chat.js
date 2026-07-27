@@ -1,14 +1,15 @@
 /**
- * 通用对话（不绑定 Agent，用默认 Provider，支持会话持久化 + 文件上传）
+ * 通用对话（不绑定 Agent，用默认 Provider，支持会话持久化 + 文件上传 + 工作流模式）
  * @param {string} message 当前消息
  * @param {string} [conversationId] 可选；传入则复用会话
  * @param {object} callbacks { onConversationId, onThinking, onDelta, onDone, onError }
  * @param {File[]} [files] 可选；传入则改用 multipart/form-data 上传
+ * @param {string} [workflowId] 可选；传入则改用工作流引擎作为后端
  * @returns {AbortController}
  */
 import client from './client';
 
-export function chatStream(message, conversationId, callbacks = {}, files = []) {
+export function chatStream(message, conversationId, callbacks = {}, files = [], workflowId = '') {
   const controller = new AbortController();
   const token = localStorage.getItem('agent_platform_token');
 
@@ -22,11 +23,12 @@ export function chatStream(message, conversationId, callbacks = {}, files = []) 
     const fd = new FormData();
     fd.append('message', message);
     if (conversationId) fd.append('conversationId', conversationId);
+    if (workflowId) fd.append('workflowId', workflowId);
     files.forEach((f) => fd.append('files', f));
     body = fd;
   } else {
     headers['Content-Type'] = 'application/json';
-    body = JSON.stringify({ message, conversationId });
+    body = JSON.stringify({ message, conversationId, workflowId: workflowId || undefined });
   }
 
   fetch('/api/chat', {

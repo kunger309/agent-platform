@@ -48,6 +48,11 @@ export class UpdateAgentDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['chat', 'workflow'])
+  type?: 'chat' | 'workflow';
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @IsOptional()

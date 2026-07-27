@@ -91,13 +91,33 @@ export class AgentsController {
     // 先发 conversationId
     res.write(`data: ${JSON.stringify({ conversationId })}\n\n`);
 
-    stream.on('data', (chunk: Buffer) => res.write(chunk));
-    stream.on('end', () => res.end());
+    // thinking 心跳：首个 delta 到达前每 800ms 推一次，避免前端长时间无反馈
+    // （必须是 JSON 事件而非 SSE 注释——注释会被前端 fetch reader 过滤掉）
+    let heartbeat: NodeJS.Timeout | null = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ thinking: true })}\n\n`);
+    }, 800);
+    const clearHeartbeat = () => {
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+    };
+
+    stream.on('data', (chunk: Buffer) => {
+      clearHeartbeat();
+      res.write(chunk);
+    });
+    stream.on('end', () => {
+      clearHeartbeat();
+      res.end();
+    });
     stream.on('error', (err: any) => {
+      clearHeartbeat();
       res.write(
         `data: ${JSON.stringify({ error: err?.message || String(err) })}\n\n`,
       );
       res.end();
     });
+    res.on('close', clearHeartbeat); // 用户断连兜底
   }
 }

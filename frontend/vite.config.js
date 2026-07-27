@@ -42,4 +42,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  build: {
+    // main.js 引导阶段使用顶层 await（app.mount 前 await /auth/me），
+    // 需 esnext 目标才能支持顶层 await；现代浏览器均支持，不影响运行。
+    target: 'esnext',
+  },
 })
