@@ -330,6 +330,7 @@ model KnowledgeBase {
   name            String
   description     String?
   embeddingModel  String   @default("text-embedding-3-small") @map("embedding_model")
+  embeddingProviderId String? @map("embedding_provider_id") // 选用的模型提供商（LlmProvider.id），用于调用 EmbeddingsService
   retrievalConfig Json     @default("{}") @map("retrieval_config") // { topK, scoreThreshold, reranker }
   status          String   @default("active")
   createdAt       DateTime @default(now()) @map("created_at")

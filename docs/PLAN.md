@@ -559,9 +559,25 @@ LLM Provider
 - 工作流可视化编辑器工程量大 → 按节点库分批交付，先做 LLM 节点
 
 ### Phase 3：知识库 + 文档解析（2 周）
-- 字符/段落/语义切片 + Embedding + Qdrant 向量化
-- 多格式文档解析（PDF/Word/Excel/PPT/Markdown/HTML/Image OCR）
-- 混合检索 + Rerank
+
+**核心**：KB CRUD + 多格式文档解析 + 切片 + Embedding + 向量检索 + 混合检索
+
+**任务清单**：
+- [ ] 后端：knowledge-bases 模块（CRUD + 数据权限 + applyDataScope）
+- [ ] 后端：embeddings 模块（OpenAI 兼容，复用 LlmProvider 解密）
+- [ ] 后端：parsers 模块（MIME 路由：pdf-parse / mammoth / xlsx / pptx / markdown-it / cheerio / 纯文本 fallback）
+- [ ] 后端：splitters（LangChain RecursiveCharacterTextSplitter）
+- [ ] 后端：vector-store 抽象 + Qdrant 适配器（ensureCollection / upsert / search / delete / scroll）
+- [ ] 后端：documents 模块（文件上传 + BullMQ 异步解析 → 切片 → embedding 写 Qdrant + 落 DocumentChunk）
+- [ ] 后端：retrievers 模块（向量召回 + BM25 + RRF 融合 + 检索测试端点）
+- [ ] 前端：api/knowledge-bases.js + 路由（kb:list/create/edit/delete + document:upload）
+- [ ] 前端：KBList.vue（CRUD）+ KBDetail.vue（文档列表 + 上传 + 检索测试）
+- [ ] 端到端验证：建 KB → 多格式上传 → 检索命中
+
+**风险**：
+- Qdrant Collection 命名隔离 → 按 `{orgId}_{kbId}` 命名
+- 大文档 embedding 慢 → BullMQ 队列 + 进度回调
+- 解析质量差（PDF/扫描件） → 先做文字 PDF；扫描件 OCR 留 Phase 4
 
 ### Phase 4：自定义 Skills 工具市场（1 周）
 - Tool 注册中心 + OpenAPI → Tool 自动生成
@@ -611,3 +627,5 @@ LLM Provider
 | 2026-07-22 | Phase 1 Week 1 完成：monorepo + NestJS + Prisma + seed + Docker + 登录闭环 |
 | 2026-07-23 | **Phase 1 全部完成**：Week 2（LLM Provider + 聊天智能体 + 前端 3 页 + useChatStream）+ Week 3（端到端验证 + 智能对话页补全 + UI 自适应 1080p/2K/4K + README）|
 | 2026-07-23 | 新增 `/api/chat` 通用对话端点（用默认 Provider 直接聊，SSE 流式），前端 `Chat.vue` 从占位改为真实多会话流式对话 |
+| 2026-07-27 | **Phase 2 全部完成**：LangGraph 工作流引擎 + vue-flow 可视化编辑器 + 示例 JSON（智能客服分流 / SQL 查询助手）+ 通用 SQL 网关 + 工作流对话模式（方案 A）+ 智能体编辑回显 + 发布按钮 + 文案统一「模型提供商」 |
+| 2026-07-27 | **Phase 3 启动**：KB CRUD + 文档解析（PDF/Word/Excel/PPT/MD/HTML/纯文本）+ 切片 + Embedding + Qdrant 向量检索 + 前端 KB 页面。共 7 个子任务，今日先完成最小闭环后逐步扩展 BM25/RRF/Rerank/OCR |

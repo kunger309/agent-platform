@@ -78,6 +78,18 @@ const routes = [
     meta: { requiresAuth: true, permission: 'provider:list', title: '模型配置', icon: 'Connection' },
   },
 
+  // 知识库（RAG）
+  {
+    path: '/knowledge-bases',
+    component: () => import('@/views/knowledge-bases/KBList.vue'),
+    meta: { requiresAuth: true, permission: 'kb:list', title: '知识库', icon: 'Collection' },
+  },
+  {
+    path: '/knowledge-bases/:id',
+    component: () => import('@/views/knowledge-bases/KBDetail.vue'),
+    meta: { requiresAuth: true, permission: 'kb:list', title: '知识库详情', hideInMenu: true },
+  },
+
   // 工作流（LangGraph 可视化编排）
   {
     path: '/workflows',

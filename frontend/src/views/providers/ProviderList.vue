@@ -130,13 +130,13 @@ const testingId = ref(null);
 const saving = ref(false);
 const formRef = ref(null);
 
-const dialog = reactive({ visible: false, editing: false, title: '添加 Provider' });
+const dialog = reactive({ visible: false, editing: false, title: '添加模型提供商' });
 // 编辑时记录原 provider 的 id（避免保存时按名字反查，用户改了名字就 404）
 const editingId = ref(null);
 const form = reactive({
   name: '',
-  providerType: 'MiniMax',
-  baseUrl: 'https://api.minimaxi.com/v1',
+  providerType: '', // 新建时不预选类型，强制用户主动选择
+  baseUrl: '',
   apiKey: '',
   models: [],
   defaultModel: '',
@@ -185,15 +185,15 @@ function openCreate() {
   editingId.value = null;
   Object.assign(form, {
     name: '',
-    providerType: 'MiniMax',
-    baseUrl: 'https://api.minimaxi.com/v1',
+    providerType: '', // 让用户主动选类型
+    baseUrl: '',
     apiKey: '',
-    models: [...(DEFAULT_MODELS.MiniMax || [])],
-    defaultModel: 'MiniMax-M3',
+    models: [],
+    defaultModel: '',
     isDefault: false,
   });
   dialog.editing = false;
-  dialog.title = '添加 Provider';
+  dialog.title = '添加模型提供商';
   dialog.visible = true;
 }
 

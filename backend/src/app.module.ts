@@ -12,6 +12,13 @@ import { HealthModule } from './health/health.module';
 import { LlmModule } from './llm/llm.module';
 import { AgentsModule } from './agents/agents.module';
 import { WorkflowsModule } from './workflows/workflows.module';
+import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
+import { DocumentsModule } from './documents/documents.module';
+import { EmbeddingsModule } from './embeddings/embeddings.module';
+import { RetrieversModule } from './retrievers/retrievers.module';
+import { ParsersModule } from './parsers/parsers.module';
+import { SplittersModule } from './splitters/splitters.module';
+import { VectorStoreModule } from './vector-store/vector-store.module';
 import { InternalModule } from './internal/internal.module';
 
 @Module({
@@ -36,6 +43,13 @@ import { InternalModule } from './internal/internal.module';
     LlmModule,
     AgentsModule,
     WorkflowsModule,
+    KnowledgeBasesModule,
+    DocumentsModule,
+    EmbeddingsModule,
+    RetrieversModule,
+    ParsersModule,
+    SplittersModule,
+    VectorStoreModule,
     InternalModule,
 
     // 系统
