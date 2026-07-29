@@ -15,6 +15,7 @@ import {
 } from './dto/create-provider.dto';
 import { createOpenAICompatibleChatModel } from './adapters/openai-compatible.adapter';
 import { ChatEngine } from './engines/chat-engine';
+import { RetrieversService } from '../retrievers/retrievers.service';
 
 /** 序列化输出：API Key 只回显末尾 4 位 */
 function toPublic(p: any, maskedKey: string) {
@@ -40,6 +41,7 @@ export class LlmService {
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
     private readonly chatEngine: ChatEngine,
+    private readonly retrievers: RetrieversService,
   ) {}
 
   private readonly logger = new Logger(LlmService.name);
@@ -216,8 +218,11 @@ export class LlmService {
   }
 
   /**
-   * 通用对话（不绑定 Agent，用默认 Provider 直接聊，支持会话持久化 + 文件上传）
-   * 返回 { stream, conversationId }，stream 是 SSE 可读流
+   * 通用对话（不绑定 Agent，用默认 Provider 直接聊，支持会话持久化 + 文件上传 + KB 检索注入）
+   * 返回 { stream, conversationId, sources }，stream 是 SSE 可读流
+   * - kbIds 非空时，自动对每个 KB 做混合检索，把命中片段拼成 systemPrompt 一并送给 LLM。
+   *   sources 是 [{ kbId, kbName, documentId, documentName, chunkIndex, content, score, vectorScore, bm25Score, sources }]
+   *   前端 chat 用 sources 在气泡下挂「参考 N 段资料」展开面板。
    */
   async chat(
     organizationId: string,
@@ -225,6 +230,7 @@ export class LlmService {
     message: string,
     conversationId?: string,
     attachments: { url: string; name: string; type: string; size: number }[] = [],
+    kbIds?: string[],
   ) {
     const provider = await this.getDefault(organizationId);
     if (!provider) {
@@ -233,23 +239,42 @@ export class LlmService {
       throw err;
     }
 
-    // 1) 加载或创建 conversation（智能对话不绑 agent）
+    // 1) 加载或创建 conversation（智能对话不绑 agent）。
+    // kbIds 为 undefined 表示旧客户端未传，沿用已保存关联；显式 [] 表示清空关联。
+    const requestedKbIds = kbIds === undefined
+      ? undefined
+      : [...new Set(kbIds.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))];
+    let resolvedKbIds = requestedKbIds ?? [];
+
     if (!conversationId) {
       const conv = await this.prisma.conversation.create({
         data: {
           organizationId,
           userId,
           agentId: null,
+          workflowId: null,
+          kbIds: resolvedKbIds,
           title: message.slice(0, 30),
           lastMessageAt: new Date(),
         },
       });
       conversationId = conv.id;
     } else {
-      const exists = await this.prisma.conversation.findFirst({
-        where: { id: conversationId, userId, agentId: null },
+      const existing = await this.prisma.conversation.findFirst({
+        where: { id: conversationId, userId, organizationId, agentId: null, workflowId: null },
+        select: { id: true, kbIds: true },
       });
-      if (!exists) throw new ForbiddenException('无权访问该会话');
+      if (!existing) throw new ForbiddenException('无权访问该会话');
+
+      resolvedKbIds = requestedKbIds ?? existing.kbIds;
+      // 用户消息一到达就刷新排序时间；无需等待 assistant 流结束，刷新页面也能立即排到首位。
+      await this.prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          lastMessageAt: new Date(),
+          ...(requestedKbIds !== undefined ? { kbIds: resolvedKbIds } : {}),
+        },
+      });
     }
 
     // 2) 先保存 user 消息（含附件元数据，必须在加载历史之前）
@@ -276,6 +301,78 @@ export class LlmService {
       (msgs[msgs.length - 1] as any).content = multimodal;
     }
 
+    // 3.6) KB 检索注入：对每个 kbId 做混合检索（向量+BM25+RRF），
+    //      拼成 systemPrompt 一并送给 LLM；同时收集 sources 用于前端展示。
+    //      失败不抛错（KB 删了/没权限时不影响主对话），warn 日志 + sources 标注 error。
+    let systemPromptFromKb: string | undefined;
+    let sources: any[] = [];
+    if (resolvedKbIds.length) {
+      const blocks: string[] = [];
+      for (const kbId of resolvedKbIds) {
+        try {
+          const ret = await this.retrievers.retrieve(organizationId, kbId, message, {
+            topK: 5,
+            scoreThreshold: 0,
+          });
+          // 反查 KB 名称（用于 sources 展示）
+          let kbName = kbId;
+          try {
+            const kb = await this.prisma.knowledgeBase.findFirst({
+              where: { id: kbId, organizationId },
+              select: { id: true, name: true },
+            });
+            if (kb) kbName = kb.name;
+          } catch { /* 名称查不到也不影响主流程 */ }
+
+          if (!ret.results.length) {
+            blocks.push(`[知识库 "${kbName}"] 未命中任何内容。`);
+            continue;
+          }
+          const hits = ret.results.map((r, i) => {
+            const vec = r.vectorScore != null ? r.vectorScore.toFixed(4) : '-';
+            const bm = r.bm25Score != null ? r.bm25Score.toFixed(4) : '-';
+            return `[${i + 1}] (RRF=${r.score.toFixed(4)}, vec=${vec}, bm25=${bm})\n${(r.content || '').replace(/\s+/g, ' ').trim()}`;
+          }).join('\n\n');
+          blocks.push(`[知识库 "${kbName}"] 共 ${ret.total} 条命中：\n\n${hits}`);
+
+          // 收集 sources（含 KB 名 + 文档名 + 内容）
+          for (const r of ret.results) {
+            let documentName = r.documentId || '';
+            if (r.documentId) {
+              try {
+                const doc = await this.prisma.document.findFirst({
+                  where: { id: r.documentId, knowledgeBaseId: kbId },
+                  select: { name: true, originalName: true },
+                });
+                if (doc) documentName = doc.originalName || doc.name;
+              } catch { /* 文档查不到时回退到 id */ }
+            }
+            sources.push({
+              kbId,
+              kbName,
+              documentId: r.documentId,
+              documentName,
+              chunkIndex: r.chunkIndex,
+              content: r.content,
+              score: r.score,
+              vectorScore: r.vectorScore,
+              bm25Score: r.bm25Score,
+              sources: r.sources,
+            });
+          }
+        } catch (e: any) {
+          this.logger.warn(`[LlmService.chat] kb ${kbId} 检索失败: ${e?.message}`);
+          sources.push({ kbId, error: e?.message || String(e) });
+        }
+      }
+      if (blocks.length) {
+        systemPromptFromKb =
+          '你可以参考以下从知识库检索到的资料回答用户问题。' +
+          '如果资料里没有相关信息，请明确说明「知识库未命中」并基于你的通用知识回答。\n\n' +
+          blocks.join('\n\n---\n\n');
+      }
+    }
+
     // 4) 创建 chatModel + 流式生成
     const llm = this.createChatModel({
       providerType: provider.providerType,
@@ -287,6 +384,7 @@ export class LlmService {
     const { stream, getAccumulated } = await this.chatEngine.streamChat({
       llm,
       history: msgs as any,
+      systemPrompt: systemPromptFromKb,
     });
 
     // 5) 流结束后异步保存 assistant 消息 + 更新 lastMessageAt
@@ -316,7 +414,7 @@ export class LlmService {
       })();
     });
 
-    return { stream, conversationId };
+    return { stream, conversationId, sources };
   }
 
   /**
@@ -364,7 +462,10 @@ export class LlmService {
     // （纯 LLM：agentId/workflowId 均空；智能体：agentId 非空；工作流：workflowId 非空）
     return this.prisma.conversation.findMany({
       where: { userId, organizationId },
-      orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [
+        { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
       select: {
         id: true,
         title: true,
@@ -372,6 +473,7 @@ export class LlmService {
         createdAt: true,
         workflowId: true, // 工作流模式对话会带这个字段
         agentId: true, // 智能体模式对话会带这个字段
+        kbIds: true, // 知识库问答关联，前端刷新后恢复 chips 与后续检索
       },
       take: 50,
     });

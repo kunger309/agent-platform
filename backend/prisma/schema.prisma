@@ -390,6 +390,7 @@ model Conversation {
   organizationId  String   @map("organization_id")
   agentId         String?  @map("agent_id")
   workflowId      String?  @map("workflow_id") // 绑工作流对话：每次 send 走工作流引擎
+  kbIds           String[] @default([]) @map("kb_ids") // 纯 LLM 知识库问答关联，刷新后仍可恢复
   userId          String   @map("user_id")
   title           String   @default("New Conversation")
   status          String   @default("active") // active / archived

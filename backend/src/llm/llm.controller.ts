@@ -138,7 +138,14 @@ export class ChatController {
   @UseInterceptors(chatUploadInterceptor)
   async chat(
     @UploadedFiles() files: any[],
-    @Body() body: { message?: string; conversationId?: string; workflowId?: string },
+    @Body() body: {
+      message?: string;
+      conversationId?: string;
+      workflowId?: string;
+      // 关联知识库：多 KB 并行检索，结果拼成 systemPrompt 喂给 LLM
+      // 接受 JSON 数组字符串（multipart 走 form-data 时是字符串）或直接数组（application/json 时）
+      kbIds?: string[] | string;
+    },
     @Request() req: any,
     @Res() res: Response,
   ) {
@@ -156,14 +163,38 @@ export class ChatController {
       size: f.size,
     }));
 
+    // 解析 kbIds：multipart 时是字符串、application/json 时是数组。
+    // undefined 表示旧客户端未传，沿用会话已保存的关联；显式 [] 表示清空关联。
+    let kbIds: string[] | undefined;
+    if (Array.isArray(body?.kbIds)) {
+      kbIds = body.kbIds.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim());
+    } else if (typeof body?.kbIds === 'string') {
+      const raw = body.kbIds.trim();
+      if (!raw) {
+        kbIds = [];
+      } else {
+        try {
+          const parsed = JSON.parse(raw);
+          kbIds = Array.isArray(parsed)
+            ? parsed.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim())
+            : [];
+        } catch {
+          // 兼容"逗号分隔"写法
+          kbIds = raw.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+    }
+    if (kbIds) kbIds = [...new Set(kbIds)];
+
     // ===== 模式分支：工作流模式 vs 纯 LLM 模式 =====
     const workflowId = (body?.workflowId || '').trim();
     if (workflowId) {
+      // 工作流模式暂不直接注入 KB——用户应把 KB 节点编进工作流图本身
       return this.chatWithWorkflow(req, res, workflowId, message, body?.conversationId, attachments);
     }
 
     // ===== 纯 LLM 模式（原行为）=====
-    let chatResult: { stream: any; conversationId: string };
+    let chatResult: { stream: any; conversationId: string; sources?: any[] };
     try {
       chatResult = await this.llm.chat(
         req.user.currentOrgId,
@@ -171,6 +202,7 @@ export class ChatController {
         message,
         body?.conversationId,
         attachments,
+        kbIds,
       );
     } catch (err: any) {
       this.logger.error(`[ChatController] chat() failed: ${err?.message || err}`);
@@ -184,7 +216,7 @@ export class ChatController {
       return;
     }
 
-    const { stream, conversationId } = chatResult;
+    const { stream, conversationId, sources } = chatResult;
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -194,6 +226,11 @@ export class ChatController {
 
     // 首个事件：把 conversationId 发给前端，让前端能维持会话
     res.write(`data: ${JSON.stringify({ conversationId })}\n\n`);
+
+    // 第二个事件：把 KB 检索来源发给前端，用于在气泡下挂「参考 N 段资料」面板
+    if (sources && sources.length) {
+      res.write(`data: ${JSON.stringify({ sources })}\n\n`);
+    }
 
     // Keepalive：在首个 delta 到达前，每 800ms 给前端推一次
     // {"thinking":true} 事件，作用：

@@ -44,6 +44,9 @@ export interface RunDeps {
   // ChatEngine：SSE 流式
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   chatEngine: any;
+  // RetrieversService：知识库混合检索（向量+BM25+RRF）。KB 节点使用。
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  retrievers: any;
   // 事件发射（写入 SSE + 落 ExecutionLog）
   emit: (event: WorkflowEvent) => void;
   runId: string;

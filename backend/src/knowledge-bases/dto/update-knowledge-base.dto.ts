@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsIn, IsInt, Min, Max } from 'class-validator';
 
 export class UpdateKnowledgeBaseDto {
   @IsOptional()
@@ -16,6 +16,18 @@ export class UpdateKnowledgeBaseDto {
   @IsOptional()
   @IsString()
   embeddingProviderId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(50)
+  @Max(5000)
+  chunkSize?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2000)
+  chunkOverlap?: number;
 
   @IsOptional()
   @IsObject()

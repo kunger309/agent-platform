@@ -22,8 +22,8 @@
             <el-icon class="session-icon"><ChatDotRound /></el-icon>
             <span
               class="mode-dot"
-              :class="s.workflowId ? 'dot-wf' : s.agentId ? 'dot-agent' : 'dot-llm'"
-              :title="s.workflowId ? '工作流对话' : s.agentId ? '智能体对话' : '纯 LLM 对话'"
+              :class="s.workflowId ? 'dot-wf' : s.agentId ? 'dot-agent' : s.kbIds?.length ? 'dot-kb' : 'dot-llm'"
+              :title="s.workflowId ? '工作流对话' : s.agentId ? '智能体对话' : s.kbIds?.length ? '知识库问答' : '纯 LLM 对话'"
             ></span>
             <span class="session-title">{{ s.title || '新对话' }}</span>
             <el-icon class="session-del" @click.stop="removeSession(s)">
@@ -42,15 +42,53 @@
             :class="{
               'mode-pill-wf': activeSession?.workflowId,
               'mode-pill-agent': activeSession?.agentId,
+              'mode-pill-kb': !activeSession?.workflowId && !activeSession?.agentId && activeSession?.kbIds?.length,
             }"
           >
             <el-icon v-if="activeSession?.workflowId"><Connection /></el-icon>
             <el-icon v-else-if="activeSession?.agentId"><MagicStick /></el-icon>
+            <el-icon v-else-if="activeSession?.kbIds?.length"><Collection /></el-icon>
             <el-icon v-else><ChatDotRound /></el-icon>
             <span v-if="activeSession?.workflowId">工作流：{{ workflowName(activeSession.workflowId) }}</span>
             <span v-else-if="activeSession?.agentId">智能体：{{ agentName(activeSession.agentId) }}</span>
+            <span v-else-if="activeSession?.kbIds?.length">知识库问答</span>
             <span v-else>纯 LLM 对话</span>
           </div>
+
+          <!-- 知识库 chips：显示当前会话已关联的 KB，点击删除 -->
+          <div class="kb-chips" v-if="activeSession && !activeSession.workflowId && !activeSession.agentId">
+            <el-tag
+              v-for="id in (activeSession.kbIds || [])"
+              :key="id"
+              type="warning"
+              size="small"
+              closable
+              @close="removeKb(id)"
+              :title="kbName(id)"
+            >
+              <el-icon><Collection /></el-icon>
+              <span style="margin-left: 4px">{{ kbName(id) }}</span>
+            </el-tag>
+            <el-button
+              v-if="!activeSession.kbIds?.length"
+              text
+              :icon="Collection"
+              size="small"
+              @click="openKbPicker"
+            >
+              关联知识库
+            </el-button>
+            <el-button
+              v-else
+              text
+              :icon="Plus"
+              size="small"
+              @click="openKbPicker"
+            >
+              管理
+            </el-button>
+          </div>
+
           <el-button text :icon="Switch" @click="openWorkflowPicker" size="small">
             切换模式
           </el-button>
@@ -61,7 +99,7 @@
           @dragover.prevent="onDragOver"
           @drop.prevent="onDrop"
         >
-          <div v-if="!activeSession || activeSession.messages.length === 0" class="empty">
+          <div v-if="!activeSession || !(activeSession.messages?.length)" class="empty">
             <el-icon size="56" color="#dcdfe6"><ChatDotRound /></el-icon>
             <p class="empty-title">开始一段新对话</p>
             <p class="empty-hint">用默认模型提供商直接聊，支持 Markdown 与文件上传</p>
@@ -115,6 +153,31 @@
                     />
                   </template>
                 </template>
+                <!-- 检索来源：KB 命中片段（可展开） -->
+                <div
+                  v-if="m.sources && m.sources.length"
+                  class="sources-panel"
+                >
+                  <div class="sources-header" @click="m.sourcesOpen = !m.sourcesOpen">
+                    <el-icon><Collection /></el-icon>
+                    <span>参考 {{ m.sources.length }} 段资料</span>
+                    <el-icon class="sources-caret" :class="{ open: m.sourcesOpen }"><CaretBottom /></el-icon>
+                  </div>
+                  <div v-if="m.sourcesOpen" class="sources-body">
+                    <div
+                      v-for="(s, si) in m.sources"
+                      :key="si"
+                      class="source-item"
+                    >
+                      <div class="source-meta">
+                        <el-tag size="small" type="info">{{ s.kbName || s.kbId }}</el-tag>
+                        <span class="source-doc">{{ s.documentName || s.documentId || '未知文档' }}<span v-if="s.chunkIndex != null"> · 第 {{ s.chunkIndex + 1 }} 段</span></span>
+                        <span class="source-score">RRF {{ (s.score ?? 0).toFixed(4) }}</span>
+                      </div>
+                      <div class="source-content">{{ s.content }}</div>
+                    </div>
+                  </div>
+                </div>
                 <div v-if="m.attachments && m.attachments.length" class="attach-list ai-attach">
                   <div v-for="(a, ai) in m.attachments" :key="ai" class="attach-item">
                     <img v-if="a.type && a.type.startsWith('image/')" :src="a.url" class="attach-thumb" alt="">
@@ -249,6 +312,38 @@
         >确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 知识库选择器：多选，给当前会话关联 KB -->
+    <el-dialog
+      v-model="kbPickerOpen"
+      title="关联知识库"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <el-select
+        v-model="kbPickerSelected"
+        multiple
+        filterable
+        placeholder="选择要检索的知识库"
+        style="width: 100%"
+      >
+        <el-option
+          v-for="k in availableKbs"
+          :key="k.id"
+          :label="k.name"
+          :value="k.id"
+        />
+      </el-select>
+      <p class="wf-picker-hint">
+        每个消息都会对所选知识库做混合检索（向量+BM25+RRF），命中片段会作为 system prompt 喂给 LLM，
+        并在回复下显示「参考 N 段资料」面板。仅「纯 LLM 对话」生效（智能体/工作流模式按各自的 KB 节点/工作流图配置）。
+      </p>
+      <p class="wf-picker-hint" v-if="availableKbs.length === 0">尚未配置任何知识库，请先在「知识库」页创建。</p>
+      <template #footer>
+        <el-button @click="kbPickerOpen = false">取消</el-button>
+        <el-button type="primary" @click="confirmKbPicker">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -256,7 +351,7 @@
 import { ref, reactive, computed, nextTick, onMounted } from 'vue';
 import {
   Plus, Close, ChatDotRound, MagicStick, UploadFilled, Document, VideoPause,
-  Switch, Connection,
+  Switch, Connection, Collection, CaretBottom,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -267,6 +362,7 @@ import {
 } from '@/api/chat';
 import { listWorkflows } from '@/api/workflows';
 import { listAgents, chatStream as agentChatStream } from '@/api/agent';
+import { listKnowledgeBases } from '@/api/knowledge-bases';
 import ThinkingBlock from '@/components/chat/ThinkingBlock.vue';
 import MarkdownView from '@/components/chat/MarkdownView.vue';
 
@@ -279,6 +375,7 @@ function makeLocalSession() {
     messages: [],
     workflowId: null, // 绑工作流：非空时 send 会走工作流引擎
     agentId: null, // 绑智能体：非空时 send 会走 /api/agents/{id}/chat
+    kbIds: [], // 关联知识库：非空时后端会自动做混合检索并把命中片段喂给 LLM
   };
 }
 
@@ -303,6 +400,21 @@ const agentPickerSelected = ref('');
 const wfPickerLoading = ref(false);
 let controller = null;
 let typingTimer = null;
+// ===== 知识库选择器状态（per-session）=====
+const availableKbs = ref([]); // 全组织可用的 KB 列表（懒加载一次）
+let kbsLoaded = false;
+const kbPickerOpen = ref(false);
+const kbPickerSelected = ref([]); // el-select 多选 v-model
+async function loadKbsIfNeeded() {
+  if (kbsLoaded) return;
+  try {
+    const list = await listKnowledgeBases();
+    availableKbs.value = (list || []).filter((k) => k.status !== 'archived');
+    kbsLoaded = true;
+  } catch (e) {
+    ElMessage.error('加载知识库列表失败：' + (e?.message || e));
+  }
+}
 
 const activeSession = computed(
   () => sessions.value.find((s) => (s.id || s.localId) === activeKey.value),
@@ -397,12 +509,20 @@ async function loadSessions() {
       localId: c.id,
       title: c.title || '新对话',
       messages: [],
-      lastMessageAt: c.lastMessageAt,
+      lastMessageAt: c.lastMessageAt || null,
+      createdAt: c.createdAt || null,
       workflowId: c.workflowId || null, // 工作流模式对话的标记
       agentId: c.agentId || null, // 智能体模式对话的标记
-    }));
-    // 历史会话里有智能体对话时，懒加载一次智能体名字（用于顶栏展示）
+      kbIds: Array.isArray(c.kbIds) ? c.kbIds : [], // 兼容旧接口/历史数据，模板永远拿到数组
+    })).sort((a, b) => {
+      // 前端再做一次防御性排序：即使旧后端把 NULL lastMessageAt 放在最前，也按最近活动时间排列。
+      const aTime = Date.parse(a.lastMessageAt || a.createdAt || 0) || 0;
+      const bTime = Date.parse(b.lastMessageAt || b.createdAt || 0) || 0;
+      return bTime - aTime;
+    });
+    // 历史会话里有智能体/知识库对话时，懒加载名字（用于顶栏与 chips 展示）
     if (fresh.some((c) => c.agentId)) ensureAgentNames();
+    if (fresh.some((c) => c.kbIds.length)) loadKbsIfNeeded();
     // 保留当前激活会话的内存 messages，避免 loadSessions 把还在流式打字的消息"刷掉"。
     // 仅在首次进入页面（无激活会话）或列表为空时才强制切换 activeKey。
     const stillActive =
@@ -456,9 +576,22 @@ function normalizeAttachments(a) {
 async function switchSession(s) {
   const key = s.id || s.localId;
   if (key === activeKey.value) return;
+  // 历史接口/旧数据缺字段时先规范化，避免模板读取 undefined.length 让整个组件崩溃。
+  if (!Array.isArray(s.messages)) s.messages = [];
+  if (!Array.isArray(s.kbIds)) s.kbIds = [];
   activeKey.value = key;
   if (s.id && s.messages.length === 0) {
     await loadMessages(s.id);
+  }
+}
+
+function promoteSession(s, at = new Date().toISOString()) {
+  if (!s) return;
+  s.lastMessageAt = at;
+  const index = sessions.value.indexOf(s);
+  if (index > 0) {
+    sessions.value.splice(index, 1);
+    sessions.value.unshift(s);
   }
 }
 
@@ -568,6 +701,8 @@ function send() {
     phase: 'thinking',
     elapsed: 0,
     attachments: [],
+    sources: [], // KB 检索来源（首个 delta 之前由 onSources 注入）
+    sourcesOpen: false, // 是否展开来源面板
   });
   session.messages.push(aiMsg);
   startTyper(aiMsg); // 启动打字机：随 deltas 到达逐字 reveal
@@ -590,26 +725,20 @@ function send() {
   const sseCallbacks = {
       onConversationId: (cid) => {
         if (!session.id) {
-          // 不调 loadSessions() —— 后端给的 cid 就是当前会话的后端 id，
-          // 只需把本地会话升级为持久会话，保留正在流式 reveal 的 messages（避免被整个替换后"丢消息"）。
+          // 不调 loadSessions()：只把当前本地对象升级为持久会话，保留流式 messages。
           session.id = cid;
           session.localId = cid;
           activeKey.value = cid;
-          // 侧边栏补一条：把这条新会话加到列表头（如果还没有）
-          const exists = sessions.value.some((x) => x.id === cid);
-          if (!exists) {
-            const stub = {
-              id: cid,
-              localId: cid,
-              title: session.title || '新对话',
-              messages: session.messages,
-              lastMessageAt: new Date().toISOString(),
-              workflowId: session.workflowId || null,
-              agentId: session.agentId || null,
-            };
-            sessions.value.unshift(stub);
-          }
         }
+        if (!Array.isArray(session.kbIds)) session.kbIds = [];
+        if (!sessions.value.includes(session)) sessions.value.unshift(session);
+        // 新建或继续发送都立即移到列表首位，不等流结束后重拉整个列表。
+        promoteSession(session);
+      },
+      onSources: (items) => {
+        // KB 检索来源（首个 delta 之前注入），覆盖默认 []。
+        // 注意：sources 一旦挂上就跟着 aiMsg 走，重发（abort+resend）也不会残留
+        aiMsg.sources = Array.isArray(items) ? items : [];
       },
       onThinking: () => {
         // keepalive 心跳：保持 thinking 状态
@@ -628,15 +757,8 @@ function send() {
         streaming.value = false;
         stopTypingTimer();
         controller = null;
-        // 只更新侧边栏对应会话的 lastMessageAt，不重拉整个会话列表（避免流式结束后"界面刷新"）
-        const s = sessions.value.find((x) => (x.id || x.localId) === conversationId);
-        if (s) s.lastMessageAt = new Date().toISOString();
-        // 持久化会话可能还没把 localId 升级为后端 id（极端时序），确保侧边栏可定位
-        if (session.id !== conversationId && conversationId) {
-          session.id = conversationId;
-          session.localId = conversationId;
-          activeKey.value = conversationId;
-        }
+        // 局部更新并移到首位，不重拉整个会话列表（避免流式结束后界面闪烁/消息丢失）。
+        promoteSession(session);
       },
       onError: (msg) => {
         aiMsg.content += `\n\n[错误] ${msg}`;
@@ -646,6 +768,7 @@ function send() {
         streaming.value = false;
         stopTypingTimer();
         controller = null;
+        promoteSession(session);
         error.value = msg;
       },
   };
@@ -665,6 +788,7 @@ function send() {
       sseCallbacks,
       filePayload,
       session.workflowId || '', // 工作流模式：把当前会话绑定的 workflowId 传后端
+      session.workflowId ? [] : (session.kbIds || []), // 工作流模式 KB 由图本身管；纯 LLM 用会话的 kbIds
     );
   }
 }
@@ -802,6 +926,28 @@ async function confirmWorkflowPicker() {
 onMounted(() => {
   loadSessions();
 });
+
+/* ===== 知识库选择器 ===== */
+function kbName(id) {
+  const k = availableKbs.value.find((x) => x.id === id);
+  return k ? k.name : id;
+}
+function openKbPicker() {
+  loadKbsIfNeeded();
+  const s = activeSession.value;
+  kbPickerSelected.value = s?.kbIds ? [...s.kbIds] : [];
+  kbPickerOpen.value = true;
+}
+function confirmKbPicker() {
+  const s = activeSession.value;
+  if (s) s.kbIds = [...kbPickerSelected.value];
+  kbPickerOpen.value = false;
+}
+function removeKb(id) {
+  const s = activeSession.value;
+  if (!s) return;
+  s.kbIds = (s.kbIds || []).filter((x) => x !== id);
+}
 </script>
 
 <style scoped>
@@ -843,7 +989,11 @@ onMounted(() => {
   background: #f5f0ff;
   color: #722ed1;
 }
-/* 会话列表三色模式点：绿=纯 LLM，紫=智能体，蓝=工作流 */
+.mode-pill.mode-pill-kb {
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+/* 会话列表四色模式点：绿=纯 LLM，橙=知识库，紫=智能体，蓝=工作流 */
 .mode-dot {
   width: 7px;
   height: 7px;
@@ -852,6 +1002,7 @@ onMounted(() => {
   display: inline-block;
 }
 .dot-llm { background: #67c23a; }
+.dot-kb { background: #e6a23c; }
 .dot-agent { background: #722ed1; }
 .dot-wf { background: #409eff; }
 .wf-picker-mode {
@@ -1072,4 +1223,66 @@ onMounted(() => {
   align-items: center;
 }
 .hidden-file { display: none; }
+
+/* ===== 工具栏 KB chips ===== */
+.kb-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ===== 助手消息：检索来源面板 ===== */
+.sources-panel {
+  margin-top: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fafbfc;
+  font-size: 12px;
+  overflow: hidden;
+}
+.sources-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #606266;
+  user-select: none;
+}
+.sources-header:hover { background: #f0f3f7; }
+.sources-caret { margin-left: auto; transition: transform 0.2s; }
+.sources-caret.open { transform: rotate(180deg); }
+.sources-body {
+  border-top: 1px solid #ebeef5;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.source-item {
+  padding: 6px 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.source-item:last-child { border-bottom: none; }
+.source-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.source-doc { color: #303133; font-weight: 500; }
+.source-score {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #909399;
+  font-size: 11px;
+}
+.source-content {
+  color: #606266;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+}
 </style>

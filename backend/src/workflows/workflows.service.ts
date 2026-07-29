@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import { LlmService } from '../llm/llm.service';
 import { ChatEngine } from '../llm/engines/chat-engine';
+import { RetrieversService } from '../retrievers/retrievers.service';
 import { runWorkflowSafe } from './graph/compiler';
 import { CreateWorkflowDto, UpdateWorkflowDto, RunWorkflowDto } from './dto';
 
@@ -17,6 +18,7 @@ export class WorkflowsService {
     private readonly llm: LlmService,
     @Inject(forwardRef(() => ChatEngine))
     private readonly chatEngine: ChatEngine,
+    private readonly retrievers: RetrieversService,
   ) {}
 
   private readonly logger = new Logger(WorkflowsService.name);
@@ -171,6 +173,7 @@ export class WorkflowsService {
         orgId: organizationId,
         llm: this.llm,
         chatEngine: this.chatEngine,
+        retrievers: this.retrievers,
         emit: emitAndLog,
         runId: execution.id,
       },

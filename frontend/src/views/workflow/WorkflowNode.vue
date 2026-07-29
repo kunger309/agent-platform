@@ -36,7 +36,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, inject } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import * as ElIcons from '@element-plus/icons-vue';
 import { getNodeMeta, nodeSummary } from './nodeMeta';
@@ -46,9 +46,14 @@ const props = defineProps({
   selected: { type: Boolean, default: false },
 });
 
+// 父组件注入 KB 列表查找器（用于 KB 节点摘要显示名称）
+const kbLookup = inject('wfKbLookup', null);
+
 const meta = computed(() => getNodeMeta(props.data.nodeType));
 const IconComp = computed(() => ElIcons[meta.value.icon] || ElIcons.Document);
-const summary = computed(() => nodeSummary(props.data.nodeType, props.data.config || {}));
+const summary = computed(() =>
+  nodeSummary(props.data.nodeType, props.data.config || {}, kbLookup),
+);
 </script>
 
 <style scoped>

@@ -154,7 +154,51 @@
 
             <!-- KB -->
             <template v-else-if="selected.data.nodeType === 'kb'">
-              <el-alert type="info" :closable="false" title="知识库节点将在 Phase 3 上线，当前为占位" />
+              <el-form-item label="知识库" required>
+                <el-select
+                  v-model="selected.data.config.kbId"
+                  placeholder="选择要检索的知识库"
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="k in kbs"
+                    :key="k.id"
+                    :label="k.name"
+                    :value="k.id"
+                  />
+                </el-select>
+                <div class="form-tip" v-if="kbs.length === 0">尚未配置任何知识库，请先在「知识库」页创建</div>
+              </el-form-item>
+              <el-form-item label="检索 Query">
+                <el-input
+                  v-model="selected.data.config.query"
+                  type="textarea"
+                  :rows="2"
+                  placeholder="默认 {{input}}，可引用上游节点输出如 {{n1.output}}"
+                />
+                <div class="form-tip">使用混合检索（向量 + BM25 + RRF）。Query 支持模板插值。</div>
+              </el-form-item>
+              <el-form-item label="返回条数 topK">
+                <el-input-number v-model="selected.data.config.topK" :min="1" :max="50" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="向量相似度阈值">
+                <el-input-number
+                  v-model="selected.data.config.scoreThreshold"
+                  :min="0"
+                  :max="1"
+                  :step="0.05"
+                  style="width: 100%"
+                />
+                <div class="form-tip">0=不过滤；建议 0.5+ 保证质量</div>
+              </el-form-item>
+              <el-alert
+                type="success"
+                :closable="false"
+                show-icon
+                title="下游 LLM 用法"
+                description="本节点会把检索结果（markdown 文本）写入 output，下游 LLM 节点的 prompt 模板里用 {{n_kb_id.output}} 引用即可。"
+              />
             </template>
           </el-form>
 
@@ -192,7 +236,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, markRaw, onMounted } from 'vue';
+import { ref, reactive, computed, markRaw, onMounted, provide } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   VueFlow,
@@ -211,6 +255,7 @@ import * as ElIcons from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { getWorkflow, updateWorkflow } from '@/api/workflows';
 import { listProviders } from '@/api/provider';
+import { listKnowledgeBases } from '@/api/knowledge-bases';
 import { NODE_TYPES, getNodeMeta } from './nodeMeta';
 import WorkflowNode from './WorkflowNode.vue';
 
@@ -223,6 +268,7 @@ const wfName = ref(route.query.name || '工作流');
 const nodes = ref([]);
 const edges = ref([]);
 const providers = ref([]);
+const kbs = ref([]); // 知识库列表（KB 节点配置面板与节点摘要共用）
 const saved = ref(true);
 const saving = ref(false);
 const drawer = ref(false);
@@ -418,11 +464,19 @@ function goDebug() {
 }
 
 onMounted(async () => {
-  const [wf, ps] = await Promise.all([getWorkflow(wfId), listProviders()]);
+  const [wf, ps, kbsRes] = await Promise.all([
+    getWorkflow(wfId),
+    listProviders(),
+    listKnowledgeBases().catch(() => ({ data: [] })),
+  ]);
   wfName.value = wf.name || wfName.value;
   fromBackend(wf.graphJson);
   providers.value = ps || [];
+  kbs.value = (kbsRes && kbsRes.data) || [];
 });
+
+// 给子节点卡片注入 KB 名称查询器，让 KB 节点摘要显示「KB: 名称 · topK=5」
+provide('wfKbLookup', (kbId) => kbs.value.find((k) => k.id === kbId) || null);
 </script>
 
 <style scoped>

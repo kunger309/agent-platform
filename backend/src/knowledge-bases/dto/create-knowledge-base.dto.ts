@@ -4,6 +4,9 @@ import {
   IsOptional,
   IsObject,
   IsIn,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 
 /**
@@ -47,6 +50,24 @@ export class CreateKnowledgeBaseDto {
   @IsOptional()
   @IsString()
   embeddingProviderId?: string;
+
+  /**
+   * 切分大小（字符数），与 documents.service 的 splitter 配合
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(50)
+  @Max(5000)
+  chunkSize?: number;
+
+  /**
+   * 切分重叠（字符数）
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2000)
+  chunkOverlap?: number;
 
   /**
    * 检索配置（落库到 retrieval_config JSON）

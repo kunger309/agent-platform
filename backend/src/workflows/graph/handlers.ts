@@ -242,12 +242,56 @@ export async function handleCode(ctx: HandlerCtx): Promise<HandlerResult> {
   };
 }
 
-// ============ KB 节点（Phase 3 占位） ============
+// ============ KB 节点（混合检索：向量 + BM25 + RRF） ============
+// config: { kbId: string, query?: string, topK?: number, scoreThreshold?: number }
+// - query 默认 {{input}}，支持 {{变量}} 插值
+// - 调 deps.retrievers.retrieve(orgId, kbId, query, {topK, scoreThreshold})
+// - 双输出：
+//   1) state.output  → markdown 文本块，直接喂下游 LLM 节点做 RAG
+//   2) state.variables.kb_results → JSON 完整结果，供 code / condition 节点使用
 export async function handleKb(ctx: HandlerCtx): Promise<HandlerResult> {
-  const { state } = ctx;
-  const note = '[KB 检索占位] 将在 Phase 3 知识库上线后启用';
+  const { state, config, deps, nodeId } = ctx;
+  if (!deps.retrievers) {
+    throw new Error('KB 节点需要 RetrieversService，但 deps.retrievers 未注入');
+  }
+  const kbId = config?.kbId;
+  if (!kbId) throw new Error('KB 节点未配置 kbId');
+
+  const query = interpolate(config?.query || '{{input}}', state).trim();
+  if (!query) throw new Error('KB 节点检索 query 为空');
+
+  const topK = Math.min(50, Math.max(1, Number(config?.topK ?? 5)));
+  const scoreThreshold = Math.min(1, Math.max(0, Number(config?.scoreThreshold ?? 0)));
+
+  const result = await deps.retrievers.retrieve(deps.orgId, kbId, query, {
+    topK,
+    scoreThreshold,
+  });
+
+  // 拼成 markdown 文本块（喂 LLM 用），便于 RAG prompt 拼接
+  const blocks = result.results.map((r: any, i: number) => {
+    const src = (r.sources || []).join('+');
+    const vec = r.vectorScore != null ? r.vectorScore.toFixed(4) : '-';
+    const bm = r.bm25Score != null ? r.bm25Score.toFixed(4) : '-';
+    const head = `[${i + 1}] (来源: ${src || '-'}, RRF=${r.score.toFixed(4)}, vec=${vec}, bm25=${bm})`;
+    const body = (r.content || '').replace(/\s+/g, ' ').trim();
+    return `${head}\n${body}`;
+  });
+  const md =
+    blocks.length > 0
+      ? `[知识库检索结果] 共 ${result.total} 条命中（topK=${result.topK}）：\n\n${blocks.join('\n\n')}`
+      : `[知识库检索结果] 未命中任何内容`;
+
   return {
-    update: { output: state.output || note, variables: { kb: note } },
-    output: note,
+    update: {
+      output: md,
+      variables: {
+        kb_results: result,
+        kb_total: result.total,
+        kb_query: result.query,
+      },
+    },
+    // output 也走结构化版本，让前端 / 调试面板能直接展示 hits
+    output: { query: result.query, total: result.total, hits: result.results },
   };
 }

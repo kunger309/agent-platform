@@ -57,8 +57,8 @@ export const NODE_TYPES = [
     label: '知识库',
     icon: 'Collection',
     color: '#9333ea',
-    desc: '知识检索（Phase 3 上线）',
-    defaultConfig: {},
+    desc: '混合检索（向量 + BM25 + RRF）',
+    defaultConfig: { kbId: '', query: '{{input}}', topK: 5, scoreThreshold: 0 },
   },
 ];
 
@@ -67,7 +67,8 @@ export function getNodeMeta(type) {
 }
 
 /** 生成一个节点的配置摘要，用于在画布节点卡片上展示 */
-export function nodeSummary(type, config = {}) {
+// 第三个参数 kbLookup: (kbId) => kbObject|null，可选（KB 节点会显示 KB 名称）
+export function nodeSummary(type, config = {}, kbLookup) {
   switch (type) {
     case 'llm':
       return (config.promptTemplate || '').slice(0, 60) || '（未配置提示词）';
@@ -81,8 +82,11 @@ export function nodeSummary(type, config = {}) {
       return `${(config.method || 'POST').toUpperCase()} ${config.url || '（未配置 URL）'}`;
     case 'code':
       return (config.code || '').split('\n')[0].slice(0, 60) || 'return input;';
-    case 'kb':
-      return '知识检索占位';
+    case 'kb': {
+      const kb = kbLookup?.(config.kbId);
+      const topK = config.topK ?? 5;
+      return `KB: ${kb ? kb.name : (config.kbId || '未选')} · topK=${topK}`;
+    }
     default:
       return '';
   }
