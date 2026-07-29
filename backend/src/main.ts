@@ -2,6 +2,7 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe, Logger, NestApplicationOptions } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
+import { json, urlencoded } from 'express';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { AppModule } from './app.module';
@@ -73,6 +74,12 @@ async function bootstrap() {
 
   // 静态托管上传文件（图片/文档），供前端 <img src="/uploads/xxx"> 访问
   app.useStaticAssets(uploadsDir, { prefix: '/uploads' });
+
+  // 调大 JSON body 上限（默认 1 MB，多模态大图/长消息会被截断）
+  // - 必须在 listen 之前注册，覆盖 Nest 默认 bodyParser
+  // - multipart 路径走 FilesInterceptor（10 MB/10 个，不受此处影响）
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   await app.listen(port, '0.0.0.0');
 

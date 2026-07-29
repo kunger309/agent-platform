@@ -1,14 +1,15 @@
 /**
  * #61 Phase 3 端到端验证：建 KB → 多格式上传 → 异步解析/索引 → 跨格式检索命中 → 清理。
  *
- * 覆盖格式：TXT / MD / HTML / XLSX(真实，经 xlsx 库生成) / PDF(手工最小结构，含 UTF-16BE 文本)。
+ * 覆盖格式：TXT / MD / HTML / XLSX(真实，经 xlsx 库生成) / PDF(手工最小结构，含 UTF-16BE 文本) /
+ *           DOCX(真实文件，自带文本：DOCX 测试段落第一行 / 中文和 English mixed content / 切片测试)。
  * 用 curl 做 multipart 上传（字段名 file，最稳），其余用 fetch。
  *
  * 用法（在 backend 目录运行）：
  *   node scripts/_e2e_kb.mjs
  */
 import { execSync } from 'node:child_process';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -157,6 +158,18 @@ async function main() {
   );
   files.push({ file: pdfPath, mime: 'application/pdf', name: '差旅报销规定.pdf', fmt: 'PDF' });
 
+  // DOCX：复用项目自带测试样本（mammoth 已能在后端正确抽取其文本内容）
+  //       文本关键短语：「DOCX 测试段落第一行」「中文和 English mixed content」「切片测试」
+  const docxSrc = path.join(__dirname, '..', 'test-samples', 'sample.docx');
+  const docxPath = path.join(dir, '技术文档示例.docx');
+  copyFileSync(docxSrc, docxPath);
+  files.push({
+    file: docxPath,
+    mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    name: '技术文档示例.docx',
+    fmt: 'DOCX',
+  });
+
   // 4) 批量上传
   const docs = [];
   for (const f of files) {
@@ -193,6 +206,7 @@ async function main() {
     { q: '员工迟到几次记警告', expect: ['HTML'] },
     { q: '产品价格是多少', expect: ['XLSX'] },
     { q: 'travel reimbursement reviewed by whom', expect: ['PDF'] },
+    { q: 'DOCX 中文 English mixed content', expect: ['DOCX'] },
   ];
   log('\n· 跨格式检索验证：');
   let allHit = true;

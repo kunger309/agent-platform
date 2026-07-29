@@ -159,7 +159,9 @@
                   v-model="selected.data.config.kbId"
                   placeholder="选择要检索的知识库"
                   filterable
+                  :loading="kbOptionsLoading"
                   style="width: 100%"
+                  @visible-change="onKbSelectVisibleChange"
                 >
                   <el-option
                     v-for="k in kbs"
@@ -168,7 +170,12 @@
                     :value="k.id"
                   />
                 </el-select>
-                <div class="form-tip" v-if="kbs.length === 0">尚未配置任何知识库，请先在「知识库」页创建</div>
+                <div v-if="kbOptionsError" class="form-tip form-tip--error">
+                  知识库列表加载失败，请重新展开下拉框重试
+                </div>
+                <div v-else-if="!kbOptionsLoading && kbs.length === 0" class="form-tip">
+                  暂无可用知识库，请先在「知识库」页创建并启用
+                </div>
               </el-form-item>
               <el-form-item label="检索 Query">
                 <el-input
@@ -269,6 +276,8 @@ const nodes = ref([]);
 const edges = ref([]);
 const providers = ref([]);
 const kbs = ref([]); // 知识库列表（KB 节点配置面板与节点摘要共用）
+const kbOptionsLoading = ref(false);
+const kbOptionsError = ref('');
 const saved = ref(true);
 const saving = ref(false);
 const drawer = ref(false);
@@ -463,16 +472,42 @@ function goDebug() {
   router.push({ path: `/workflows/${wfId}/debug`, query: { name: wfName.value } });
 }
 
+async function loadKnowledgeBaseOptions() {
+  kbOptionsLoading.value = true;
+  kbOptionsError.value = '';
+  try {
+    const result = await listKnowledgeBases();
+    // client 响应拦截器已把 { success, data } 解包为数组；同时兼容未解包响应。
+    const list = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.data)
+        ? result.data
+        : [];
+    kbs.value = list.filter((item) => item?.id && item.status !== 'archived');
+  } catch (err) {
+    kbs.value = [];
+    kbOptionsError.value = err?.response?.data?.message || err?.message || '加载失败';
+    console.error('[WorkflowEditor] 加载知识库列表失败：', err);
+  } finally {
+    kbOptionsLoading.value = false;
+  }
+}
+
+function onKbSelectVisibleChange(visible) {
+  if (visible && kbs.value.length === 0 && !kbOptionsLoading.value) {
+    loadKnowledgeBaseOptions();
+  }
+}
+
 onMounted(async () => {
-  const [wf, ps, kbsRes] = await Promise.all([
+  const [wf, ps] = await Promise.all([
     getWorkflow(wfId),
     listProviders(),
-    listKnowledgeBases().catch(() => ({ data: [] })),
+    loadKnowledgeBaseOptions(),
   ]);
   wfName.value = wf.name || wfName.value;
   fromBackend(wf.graphJson);
   providers.value = ps || [];
-  kbs.value = (kbsRes && kbsRes.data) || [];
 });
 
 // 给子节点卡片注入 KB 名称查询器，让 KB 节点摘要显示「KB: 名称 · topK=5」
@@ -506,4 +541,5 @@ provide('wfKbLookup', (kbId) => kbs.value.find((k) => k.id === kbId) || null);
   color: #9ca3af; pointer-events: none; font-size: 14px;
 }
 .form-tip { font-size: 11px; color: #9ca3af; line-height: 1.4; }
+.form-tip--error { color: #f56c6c; }
 </style>
