@@ -207,6 +207,44 @@
                 description="本节点会把检索结果（markdown 文本）写入 output，下游 LLM 节点的 prompt 模板里用 {{n_kb_id.output}} 引用即可。"
               />
             </template>
+
+            <template v-else-if="selected.data.nodeType === 'skill'">
+              <el-form-item label="技能" required>
+                <el-select
+                  v-model="selected.data.config.skillId"
+                  placeholder="选择技能"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  :loading="skillOptionsLoading"
+                  @visible-change="onSkillSelectVisibleChange"
+                >
+                  <el-option
+                    v-for="s in skills"
+                    :key="s.id"
+                    :label="`${s.name}（${s.type === 'openapi' ? 'OpenAPI' : '函数'}）`"
+                    :value="s.id"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="输入参数 (JSON)">
+                <el-input
+                  v-model="skillInputText"
+                  type="textarea"
+                  :rows="4"
+                  placeholder='如：{"text": "{{input}}"}'
+                  @blur="syncSkillInput"
+                />
+                <div class="form-tip">对象里的字符串值支持 {{变量}} 插值，本节点上游 output 可引用。</div>
+              </el-form-item>
+              <el-alert
+                type="info"
+                :closable="false"
+                show-icon
+                title="说明"
+                description="技能节点的输出写入 output，下游节点用 {{n_节点id.output}} 引用即可。"
+              />
+            </template>
           </el-form>
 
           <el-button type="danger" plain :icon="Delete" @click="removeSelected">删除该节点</el-button>
@@ -243,7 +281,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, markRaw, onMounted, provide } from 'vue';
+import { ref, reactive, computed, markRaw, onMounted, provide, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   VueFlow,
@@ -263,6 +301,7 @@ import { ElMessage } from 'element-plus';
 import { getWorkflow, updateWorkflow } from '@/api/workflows';
 import { listProviders } from '@/api/provider';
 import { listKnowledgeBases } from '@/api/knowledge-bases';
+import { listSkills } from '@/api/skills';
 import { NODE_TYPES, getNodeMeta } from './nodeMeta';
 import WorkflowNode from './WorkflowNode.vue';
 
@@ -278,6 +317,8 @@ const providers = ref([]);
 const kbs = ref([]); // 知识库列表（KB 节点配置面板与节点摘要共用）
 const kbOptionsLoading = ref(false);
 const kbOptionsError = ref('');
+const skills = ref([]); // 技能列表（技能节点配置面板与节点摘要共用）
+const skillOptionsLoading = ref(false);
 const saved = ref(true);
 const saving = ref(false);
 const drawer = ref(false);
@@ -338,6 +379,29 @@ const llmModels = computed(() => {
   const p = providers.value.find((x) => x.id === selected.value?.data.config.providerId);
   return p?.models || [];
 });
+
+// 技能节点的「输入参数」编辑：对象 <-> JSON 文本 互转
+const skillInputText = ref('{}');
+watch(
+  selected,
+  (n) => {
+    if (n?.data.nodeType === 'skill') {
+      skillInputText.value = JSON.stringify(n?.data.config.input || {}, null, 2);
+    }
+  },
+  { immediate: true },
+);
+function syncSkillInput() {
+  try {
+    const obj = JSON.parse(skillInputText.value || '{}');
+    if (selected.value) {
+      selected.value.data.config.input = obj;
+      saved.value = false;
+    }
+  } catch {
+    ElMessage.warning('输入参数不是合法 JSON');
+  }
+}
 
 function iconOf(name) {
   return ElIcons[name] || ElIcons.Document;
@@ -499,6 +563,25 @@ function onKbSelectVisibleChange(visible) {
   }
 }
 
+async function loadSkillOptions() {
+  if (skillOptionsLoading.value || skills.value.length > 0) return;
+  skillOptionsLoading.value = true;
+  try {
+    const result = await listSkills();
+    const list = Array.isArray(result) ? result : Array.isArray(result?.data) ? result.data : [];
+    skills.value = list.filter((item) => item?.id);
+  } catch (err) {
+    skills.value = [];
+    console.error('[WorkflowEditor] 加载技能列表失败：', err);
+  } finally {
+    skillOptionsLoading.value = false;
+  }
+}
+
+function onSkillSelectVisibleChange(visible) {
+  if (visible) loadSkillOptions();
+}
+
 onMounted(async () => {
   const [wf, ps] = await Promise.all([
     getWorkflow(wfId),
@@ -510,8 +593,9 @@ onMounted(async () => {
   providers.value = ps || [];
 });
 
-// 给子节点卡片注入 KB 名称查询器，让 KB 节点摘要显示「KB: 名称 · topK=5」
+// 给子节点卡片注入 KB / 技能名称查询器，让节点摘要显示「KB/技能: 名称」
 provide('wfKbLookup', (kbId) => kbs.value.find((k) => k.id === kbId) || null);
+provide('wfSkillLookup', (skillId) => skills.value.find((s) => s.id === skillId) || null);
 </script>
 
 <style scoped>

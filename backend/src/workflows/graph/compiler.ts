@@ -12,6 +12,7 @@ const HANDLER_MAP: Record<string, (ctx: HandlerCtx) => Promise<HandlerResult>> =
   http: handlers.handleHttp,
   code: handlers.handleCode,
   kb: handlers.handleKb,
+  skill: handlers.handleSkill,
 };
 
 interface CompiledRun {

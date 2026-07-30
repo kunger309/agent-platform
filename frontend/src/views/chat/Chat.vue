@@ -993,7 +993,7 @@ function removeKb(id) {
   background: #fdf6ec;
   color: #e6a23c;
 }
-/* 会话列表四色模式点：绿=纯 LLM，橙=知识库，紫=智能体，蓝=工作流 */
+/* 会话列表四色模式点：与顶栏 pill 颜色保持一致（蓝=纯 LLM，橙=知识库，紫=智能体，绿=工作流） */
 .mode-dot {
   width: 7px;
   height: 7px;
@@ -1001,10 +1001,10 @@ function removeKb(id) {
   flex-shrink: 0;
   display: inline-block;
 }
-.dot-llm { background: #67c23a; }
-.dot-kb { background: #e6a23c; }
-.dot-agent { background: #722ed1; }
-.dot-wf { background: #409eff; }
+.dot-llm { background: #409eff; }   /* 蓝=纯 LLM（与 .mode-pill 默认色 #409eff 对齐） */
+.dot-kb { background: #e6a23c; }    /* 橙=知识库 */
+.dot-agent { background: #722ed1; } /* 紫=智能体 */
+.dot-wf { background: #67c23a; }    /* 绿=工作流（与 .mode-pill.mode-pill-wf 色 #67c23a 对齐） */
 .wf-picker-mode {
   display: flex;
   margin-bottom: 16px;

@@ -242,6 +242,43 @@ export async function handleCode(ctx: HandlerCtx): Promise<HandlerResult> {
   };
 }
 
+// ============ Skill 节点（自定义技能执行） ============
+// config: { skillId: string, input?: Record<string, any> }
+// - input 中字符串值支持 {{input}}/{{variables.x}} 插值
+// - 调 deps.skills.executeByVersion，并带 executionId（= runId）落 ToolInvocation
+export async function handleSkill(ctx: HandlerCtx): Promise<HandlerResult> {
+  const { state, config, deps, nodeId } = ctx;
+  if (!deps.skills) {
+    throw new Error('skill 节点需要 SkillExecutorService，但 deps.skills 未注入');
+  }
+  const skillId = config?.skillId;
+  if (!skillId) throw new Error('skill 节点未配置 skillId');
+
+  // 构造输入：对字符串值做插值，非字符串原样保留
+  const raw = config?.input || {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const input: any = {};
+  for (const [k, v] of Object.entries(raw)) {
+    input[k] = typeof v === 'string' ? interpolate(v, state) : v;
+  }
+
+  const version = await deps.skills.getLatestVersion(skillId);
+  const r = await deps.skills.executeByVersion(version, input, {
+    executionId: deps.runId,
+    orgId: deps.orgId,
+  });
+  const out =
+    r.status === 'success'
+      ? typeof r.output === 'string'
+        ? r.output
+        : JSON.stringify(r.output)
+      : 'SKILL_ERROR: ' + (r.error || 'unknown');
+  return {
+    update: { output: out, variables: { skill_out: out } },
+    output: { status: r.status, output: out, error: r.error, durationMs: r.durationMs },
+  };
+}
+
 // ============ KB 节点（混合检索：向量 + BM25 + RRF） ============
 // config: { kbId: string, query?: string, topK?: number, scoreThreshold?: number }
 // - query 默认 {{input}}，支持 {{变量}} 插值

@@ -2,6 +2,10 @@
  * 工作流节点类型元信息：图标、配色、默认配置、摘要渲染。
  * 所有节点在 Vue Flow 中统一使用自定义组件 WorkflowNode 渲染，
  * 由 data.type 决定具体外观与配置表单。
+ * @param {string} type 节点类型
+ * @param {object} config 节点配置
+ * @param {Function} [kbLookup] (kbId) => kbObject|null，KB 节点显示名称
+ * @param {Function} [skillLookup] (skillId) => skillObject|null，技能节点显示名称
  */
 export const NODE_TYPES = [
   {
@@ -60,6 +64,14 @@ export const NODE_TYPES = [
     desc: '混合检索（向量 + BM25 + RRF）',
     defaultConfig: { kbId: '', query: '{{input}}', topK: 5, scoreThreshold: 0 },
   },
+  {
+    type: 'skill',
+    label: '技能',
+    icon: 'Cpu',
+    color: '#0ea5e9',
+    desc: '调用自定义技能（函数 / OpenAPI）',
+    defaultConfig: { skillId: '', input: {} },
+  },
 ];
 
 export function getNodeMeta(type) {
@@ -68,7 +80,7 @@ export function getNodeMeta(type) {
 
 /** 生成一个节点的配置摘要，用于在画布节点卡片上展示 */
 // 第三个参数 kbLookup: (kbId) => kbObject|null，可选（KB 节点会显示 KB 名称）
-export function nodeSummary(type, config = {}, kbLookup) {
+export function nodeSummary(type, config = {}, kbLookup, skillLookup) {
   switch (type) {
     case 'llm':
       return (config.promptTemplate || '').slice(0, 60) || '（未配置提示词）';
@@ -86,6 +98,12 @@ export function nodeSummary(type, config = {}, kbLookup) {
       const kb = kbLookup?.(config.kbId);
       const topK = config.topK ?? 5;
       return `KB: ${kb ? kb.name : (config.kbId || '未选')} · topK=${topK}`;
+    }
+    case 'skill': {
+      const sk = skillLookup?.(config.skillId);
+      const keys = Object.keys(config.input || {});
+      const inputDesc = keys.length ? `入参: ${keys.join(', ')}` : '（无入参）';
+      return `技能: ${sk ? sk.name : (config.skillId || '未选')} · ${inputDesc}`;
     }
     default:
       return '';

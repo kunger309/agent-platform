@@ -4,6 +4,7 @@ import {
   Post,
   Patch,
   Delete,
+  Put,
   Body,
   Param,
   Request,
@@ -63,6 +64,26 @@ export class AgentsController {
   @RequirePermission('agent:delete')
   async delete(@Param('id') id: string, @Request() req: any) {
     return this.agents.delete(id, req.user.currentOrgId);
+  }
+
+  /** 获取智能体已绑定技能 */
+  @Get(':id/skills')
+  @RequirePermission('agent:list')
+  async getSkills(@Param('id') id: string, @Request() req: any) {
+    const data = await this.agents.getSkills(id, req.user.currentOrgId);
+    return { success: true, data };
+  }
+
+  /** 设置（全量替换）智能体技能绑定 */
+  @Put(':id/skills')
+  @RequirePermission('agent:edit')
+  async setSkills(
+    @Param('id') id: string,
+    @Body() body: { skills?: Array<{ skillId: string; enabled?: boolean; configJson?: any }> },
+    @Request() req: any,
+  ) {
+    const data = await this.agents.setSkills(id, req.user.currentOrgId, body?.skills || []);
+    return { success: true, data };
   }
 
   /**

@@ -415,6 +415,7 @@ model Message {
   role           String   // user / assistant / system / tool
   content        String
   contentJson    Json?    @map("content_json")
+  toolCalls      Json?    @map("tool_calls")
   attachments    Json?    @map("attachments")
   tokenUsage     Json?    @map("token_usage")
   runId          String?  @map("run_id")
@@ -511,6 +512,9 @@ model ToolInvocation {
   id            String   @id @default(cuid())
   executionId   String   @map("execution_id")
   skillId       String   @map("skill_id")
+  agentId       String?  @map("agent_id")      // 智能体调用时填写，便于按智能体筛选
+  userId        String?  @map("user_id")       // 调用人 userId
+  organizationId String? @map("organization_id") // 冗余存一份便于按组织筛选（避免 join execution）
   inputJson     Json     @map("input_json")
   outputJson    Json?    @map("output_json")
   status        String   @default("pending") // pending / success / failed
@@ -522,6 +526,9 @@ model ToolInvocation {
   skill     Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@index([executionId])
+  @@index([agentId])
+  @@index([skillId])
+  @@index([userId])
   @@map("tool_invocations")
 }
 

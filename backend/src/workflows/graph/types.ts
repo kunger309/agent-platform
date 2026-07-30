@@ -7,7 +7,8 @@ export type NodeType =
   | 'tool'
   | 'http'
   | 'code'
-  | 'kb';
+  | 'kb'
+  | 'skill';
 
 export interface GraphNodeData {
   label?: string;
@@ -47,6 +48,9 @@ export interface RunDeps {
   // RetrieversService：知识库混合检索（向量+BM25+RRF）。KB 节点使用。
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   retrievers: any;
+  // SkillExecutorService：技能执行（function 沙箱 / openapi fetch）。skill 节点使用。
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  skills: any;
   // 事件发射（写入 SSE + 落 ExecutionLog）
   emit: (event: WorkflowEvent) => void;
   runId: string;

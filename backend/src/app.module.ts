@@ -19,6 +19,7 @@ import { RetrieversModule } from './retrievers/retrievers.module';
 import { ParsersModule } from './parsers/parsers.module';
 import { SplittersModule } from './splitters/splitters.module';
 import { VectorStoreModule } from './vector-store/vector-store.module';
+import { SkillsModule } from './skills/skills.module';
 import { InternalModule } from './internal/internal.module';
 
 @Module({
@@ -50,6 +51,7 @@ import { InternalModule } from './internal/internal.module';
     ParsersModule,
     SplittersModule,
     VectorStoreModule,
+    SkillsModule,
     InternalModule,
 
     // 系统

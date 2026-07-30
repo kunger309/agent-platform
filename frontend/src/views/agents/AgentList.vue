@@ -81,10 +81,34 @@
           </el-select>
         </el-form-item>
         <el-form-item label="系统提示">
-          <el-input v-model="form.systemPrompt" type="textarea" :rows="3" placeholder="如：你是一个友好的客服助手" />
+          <el-input v-model="form.systemPrompt" type="textarea" :rows="4" placeholder="如：你是一个友好的客服助手" />
+          <div class="prompt-helper">
+            <el-button link size="small" type="primary" @click="regeneratePromptFromSkills">
+              <el-icon><MagicStick /></el-icon>
+              根据已绑技能生成提示词
+            </el-button>
+            <span class="hint">自动追加「遇到 X 场景请主动调用工具 Y」指引</span>
+          </div>
         </el-form-item>
         <el-form-item label="温度">
           <el-slider v-model="form.temperature" :min="0" :max="2" :step="0.1" show-input />
+        </el-form-item>
+        <el-form-item label="绑定技能">
+          <el-select
+            v-model="form.skillIds"
+            multiple
+            filterable
+            placeholder="为智能体挂载可调用的自定义技能（可选）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="s in skills"
+              :key="s.id"
+              :label="`${s.name}（${s.type === 'function' ? 'JS' : 'OpenAPI'}）`"
+              :value="s.id"
+            />
+          </el-select>
+          <div class="form-tip">绑定后，对话中会按需自动调用这些技能（function 沙箱 / OpenAPI 请求）。</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -98,14 +122,16 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { Plus } from '@element-plus/icons-vue';
+import { Plus, MagicStick } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { listProviders, PROVIDER_TYPES } from '@/api/provider';
 import { listAgents, getAgent, createAgent, updateAgent, deleteAgent } from '@/api/agent';
+import { listSkills, getAgentSkills, setAgentSkills } from '@/api/skills';
 
 const router = useRouter();
 const list = ref([]);
 const providers = ref([]);
+const skills = ref([]); // 全部技能（用于编辑时绑定）
 const loading = ref(false);
 const saving = ref(false);
 const formRef = ref(null);
@@ -119,6 +145,7 @@ const form = reactive({
   model: '',
   systemPrompt: '',
   temperature: 0.7,
+  skillIds: [],
 });
 
 const rules = {
@@ -150,10 +177,20 @@ function formatTime(t) {
   return t ? new Date(t).toLocaleString('zh-CN') : '-';
 }
 
+/** 用户点击「根据已绑技能生成提示词」：保留原前缀（去掉之前追加的工具段），重新生成 */
+function regeneratePromptFromSkills() {
+  const prev = (form.systemPrompt || '').split(/\n\n# 工具调用指引（必须遵守）/)[0];
+  applySkillPrompt(prev);
+}
+
 async function load() {
   loading.value = true;
   try {
-    [list.value, providers.value] = await Promise.all([listAgents(), listProviders()]);
+    [list.value, providers.value, skills.value] = await Promise.all([
+      listAgents(),
+      listProviders(),
+      listSkills().catch(() => []),
+    ]);
     // 异步为每个草稿智能体检查发布条件（不阻塞列表渲染）
     for (const row of list.value) {
       if (row.status !== 'published') refreshPublishReady(row);
@@ -175,9 +212,12 @@ function openCreate() {
     description: '',
     providerId: '',
     model: '',
-    systemPrompt: '你是一个专业、友好的 AI 助手。请用简洁准确的中文回答用户问题。',
+    systemPrompt: '',
     temperature: 0.7,
+    skillIds: [],
   });
+  // 默认 systemPrompt：基础人设 + 按当前已绑技能自动补「主动调用工具」段落
+  applySkillPrompt('');
   dialog.editing = false;
   dialog.id = null;
   dialog.title = '新建智能体';
@@ -196,6 +236,13 @@ async function openEdit(row) {
     const config = detail?.modelConfig && typeof detail.modelConfig === 'object'
       ? detail.modelConfig
       : {};
+    // 读取已绑定的技能（AgentSkill 关联）
+    let bound = [];
+    try {
+      bound = await getAgentSkills(row.id);
+    } catch {
+      bound = [];
+    }
     Object.assign(form, {
       name: detail.name ?? row.name ?? '',
       type: detail.type ?? row.type ?? 'chat',
@@ -204,6 +251,7 @@ async function openEdit(row) {
       model: config.model ?? '',
       systemPrompt: detail.systemPrompt ?? '',
       temperature: typeof config.temperature === 'number' ? config.temperature : 0.7,
+      skillIds: (bound || []).map((s) => s.skillId),
     });
   } catch (error) {
     dialog.visible = false;
@@ -226,10 +274,23 @@ async function saveIt() {
         temperature: form.temperature,
       },
     };
+    let agentId = dialog.id;
     if (dialog.editing) {
       await updateAgent(dialog.id, payload);
     } else {
-      await createAgent(payload);
+      const created = await createAgent(payload);
+      agentId = created?.id || created?.data?.id;
+    }
+    // 同步技能绑定（全量替换语义）
+    if (agentId) {
+      try {
+        await setAgentSkills(
+          agentId,
+          (form.skillIds || []).map((id) => ({ skillId: id, enabled: true })),
+        );
+      } catch (e) {
+        ElMessage.warning('智能体已保存，但技能绑定失败：' + (e?.message || e));
+      }
     }
     ElMessage.success('已保存');
     dialog.visible = false;
@@ -237,6 +298,51 @@ async function saveIt() {
   } finally {
     saving.value = false;
   }
+}
+
+/**
+ * 生成 systemPrompt：基础人设 + 「主动调用工具」段（按 form.skillIds 拼接）。
+ * - prevBase：保留用户已写的前缀（如「你是XX角色」），我们在后面追加工具段
+ * - 流程：取 prevBase + 技能列表推导的调用指引；如果无技能则只保留 prevBase
+ */
+function applySkillPrompt(prevBase) {
+  const base = (prevBase ?? '').trim() || '你是一个专业、友好的 AI 助手。请用简洁准确的中文回答用户问题。';
+  const ids = form.skillIds || [];
+  if (!ids.length) {
+    form.systemPrompt = base;
+    return;
+  }
+  const lines = ids
+    .map((id) => skills.value.find((s) => s.id === id))
+    .filter(Boolean)
+    .map((s) => {
+      const hint = pickSkillHint(s);
+      return `- 当用户问题涉及「${hint}」时，请主动调用工具 \`${s.name}\`（可用输入参数见技能定义）。`;
+    });
+  if (!lines.length) {
+    form.systemPrompt = base;
+    return;
+  }
+  form.systemPrompt =
+    base +
+    '\n\n# 工具调用指引（必须遵守）\n' +
+    '你已绑定以下自定义技能，遇到对应场景必须主动调用，不要凭记忆回答：\n' +
+    lines.join('\n');
+}
+
+// 为常见技能起名生成"触发场景"提示；自定义技能回退到 description 第一行
+const HINT_DICT = [
+  { match: /计算|计算器|calc/i, hint: '数学计算、表达式求值' },
+  { match: /时间|now|date/i, hint: '需要当前日期/时间' },
+  { match: /天气|weather/i, hint: '查询天气、温度' },
+  { match: /翻译|translate/i, hint: '跨语言翻译' },
+  { match: /搜索|search/i, hint: '信息检索、查询' },
+  { match: /文本|summary|统计|analy/i, hint: '文本分析、字数/词数/行数统计' },
+];
+function pickSkillHint(skill) {
+  for (const r of HINT_DICT) if (r.match.test(skill.name) || r.match.test(skill.description || '')) return r.hint;
+  if (skill.description) return skill.description.split(/[，。.\n]/)[0].trim().slice(0, 30) || skill.name;
+  return skill.name;
 }
 
 async function removeIt(row) {
@@ -298,4 +404,7 @@ onMounted(load);
 .agent-list { padding: 0; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-title { margin: 0; font-weight: 600; }
+.form-tip { font-size: 11px; color: #9ca3af; line-height: 1.4; margin-top: 4px; }
+.prompt-helper { margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.prompt-helper .hint { font-size: 12px; color: #909399; }
 </style>

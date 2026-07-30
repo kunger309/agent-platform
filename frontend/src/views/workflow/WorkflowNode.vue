@@ -46,13 +46,14 @@ const props = defineProps({
   selected: { type: Boolean, default: false },
 });
 
-// 父组件注入 KB 列表查找器（用于 KB 节点摘要显示名称）
+// 父组件注入 KB / 技能列表查找器（用于节点摘要显示名称）
 const kbLookup = inject('wfKbLookup', null);
+const skillLookup = inject('wfSkillLookup', null);
 
 const meta = computed(() => getNodeMeta(props.data.nodeType));
 const IconComp = computed(() => ElIcons[meta.value.icon] || ElIcons.Document);
 const summary = computed(() =>
-  nodeSummary(props.data.nodeType, props.data.config || {}, kbLookup),
+  nodeSummary(props.data.nodeType, props.data.config || {}, kbLookup, skillLookup),
 );
 </script>
 

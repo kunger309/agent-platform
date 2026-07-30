@@ -75,7 +75,9 @@ const PERMISSIONS: Array<{
   { code: 'skill', name: '技能管理', type: 'menu', sort: 30 },
   { code: 'skill:list', name: '查看技能', type: 'api', parentCode: 'skill', sort: 1 },
   { code: 'skill:create', name: '创建技能', type: 'button', parentCode: 'skill', sort: 2 },
-  { code: 'skill:install', name: '安装技能', type: 'button', parentCode: 'skill', sort: 3 },
+  { code: 'skill:edit', name: '编辑技能', type: 'button', parentCode: 'skill', sort: 3 },
+  { code: 'skill:delete', name: '删除技能', type: 'button', parentCode: 'skill', sort: 4 },
+  { code: 'skill:install', name: '安装技能', type: 'button', parentCode: 'skill', sort: 5 },
 
   // LLM Provider
   { code: 'provider', name: '模型配置', type: 'menu', sort: 40 },
@@ -109,7 +111,7 @@ const BUILTIN_ROLES = [
       'agent', 'agent:list', 'agent:create', 'agent:edit', 'agent:delete', 'agent:publish', 'agent:run',
       'workflow', 'workflow:list', 'workflow:create', 'workflow:edit', 'workflow:run',
       'kb', 'kb:list', 'kb:create', 'kb:edit', 'kb:delete', 'document:upload',
-      'skill', 'skill:list', 'skill:create', 'skill:install',
+      'skill', 'skill:list', 'skill:create', 'skill:edit', 'skill:delete', 'skill:install',
       'provider', 'provider:list', 'provider:create', 'provider:edit',
       'execution', 'execution:list',
     ],
@@ -122,7 +124,7 @@ const BUILTIN_ROLES = [
       'agent', 'agent:list', 'agent:create', 'agent:edit', 'agent:run',
       'workflow', 'workflow:list', 'workflow:create', 'workflow:edit', 'workflow:run',
       'kb', 'kb:list', 'kb:create', 'kb:edit', 'document:upload',
-      'skill', 'skill:list',
+      'skill', 'skill:list', 'skill:create',
       'provider', 'provider:list',
       'execution', 'execution:list',
     ],

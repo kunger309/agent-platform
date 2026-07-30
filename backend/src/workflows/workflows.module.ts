@@ -3,10 +3,11 @@ import { WorkflowsService } from './workflows.service';
 import { WorkflowsController } from './workflows.controller';
 import { LlmModule } from '../llm/llm.module';
 import { RetrieversModule } from '../retrievers/retrievers.module';
+import { SkillsModule } from '../skills/skills.module';
 
 @Module({
   // forwardRef 解决与 LlmModule 的循环依赖（LlmModule 也 import 本模块，用于 chat 控制器注入 WorkflowsService）
-  imports: [forwardRef(() => LlmModule), RetrieversModule],
+  imports: [forwardRef(() => LlmModule), RetrieversModule, SkillsModule],
   controllers: [WorkflowsController],
   providers: [WorkflowsService],
   exports: [WorkflowsService],

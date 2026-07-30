@@ -2,10 +2,12 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { LlmService } from '../llm/llm.service';
 import { ChatEngine } from '../llm/engines/chat-engine';
+import { SkillsService } from '../skills/skills.service';
 import { CreateAgentDto, UpdateAgentDto, ChatDto } from './dto/create-agent.dto';
 
 @Injectable()
@@ -14,7 +16,10 @@ export class AgentsService {
     private readonly prisma: PrismaService,
     private readonly llm: LlmService,
     private readonly chatEngine: ChatEngine,
+    private readonly skills: SkillsService,
   ) {}
+
+  private readonly logger = new Logger(AgentsService.name);
 
   async list(organizationId: string) {
     return this.prisma.agent.findMany({
@@ -36,6 +41,11 @@ export class AgentsService {
   async detail(id: string, organizationId: string) {
     const agent = await this.prisma.agent.findFirst({
       where: { id, organizationId },
+      include: {
+        agentSkills: {
+          include: { skill: { select: { id: true, name: true, type: true, status: true } } },
+        },
+      },
     });
     if (!agent) throw new NotFoundException('Agent 不存在');
     return agent;
@@ -78,6 +88,51 @@ export class AgentsService {
     await this.detail(id, organizationId);
     await this.prisma.agent.delete({ where: { id } });
     return { success: true };
+  }
+
+  /** 获取智能体已绑定的技能列表 */
+  async getSkills(agentId: string, organizationId: string) {
+    await this.detail(agentId, organizationId);
+    return this.prisma.agentSkill.findMany({
+      where: { agentId },
+      include: {
+        skill: { select: { id: true, name: true, type: true, status: true, description: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * 替换智能体的技能绑定（全量替换语义）
+   * @param skills 形如 [{ skillId, enabled?, configJson? }]
+   */
+  async setSkills(
+    agentId: string,
+    organizationId: string,
+    skills: Array<{ skillId: string; enabled?: boolean; configJson?: any }>,
+  ) {
+    await this.detail(agentId, organizationId);
+    // 校验所有 skillId 属于本组织，防止越权绑定
+    if (skills?.length) {
+      const ids = skills.map((s) => s.skillId);
+      const owned = await this.prisma.skill.count({
+        where: { id: { in: ids }, organizationId },
+      });
+      if (owned !== ids.length) throw new ForbiddenException('包含越权的技能绑定');
+    }
+
+    await this.prisma.agentSkill.deleteMany({ where: { agentId } });
+    if (skills?.length) {
+      await this.prisma.agentSkill.createMany({
+        data: skills.map((s) => ({
+          agentId,
+          skillId: s.skillId,
+          enabled: s.enabled ?? true,
+          configJson: (s.configJson as any) ?? {},
+        })),
+      });
+    }
+    return { success: true, count: skills?.length ?? 0 };
   }
 
   /**
@@ -145,25 +200,68 @@ export class AgentsService {
       select: { role: true, content: true },
     });
 
-    // 4) 流式生成，组装完整回复入库
-    const { stream, getAccumulated } = await this.chatEngine.streamChat({
+    // 4) 构建工具：加载启用的技能，转为 ChatTool
+    //    为了让 ToolInvocation 能按智能体/用户/组织筛选，这里为本次对话建一个 Execution 记录，
+    //    并把 executionId/agentId/userId/orgId 透传给 buildTool → executeByVersion。
+    let tools: any[] = [];
+    let chatExecutionId: string | undefined;
+    try {
+      const exec = await this.prisma.execution.create({
+        data: {
+          organizationId: currentUser.currentOrgId,
+          agentId,
+          conversationId,
+          userId: currentUser.userId,
+          status: 'running',
+          inputJson: { message: dto.message.slice(0, 500) },
+          traceId: `chat_${conversationId}_${Date.now()}`,
+        },
+      });
+      chatExecutionId = exec.id;
+    } catch (e: any) {
+      // 建 Execution 失败不影响聊天本身，只是这次调用不落 ToolInvocation
+      this.logger.warn(`[AgentsService] 建 chat Execution 失败: ${e?.message}`);
+    }
+    const execOpts = chatExecutionId
+      ? { executionId: chatExecutionId, agentId, userId: currentUser.userId, orgId: currentUser.currentOrgId }
+      : undefined;
+    try {
+      const agentSkills = await this.prisma.agentSkill.findMany({
+        where: { agentId, enabled: true },
+      });
+      for (const as of agentSkills) {
+        try {
+          tools.push(await this.skills.buildTool(as.skillId, execOpts));
+        } catch (e: any) {
+          this.logger.warn(`[AgentsService] 构建技能工具失败 ${as.skillId}: ${e?.message}`);
+        }
+      }
+    } catch (e: any) {
+      this.logger.warn(`[AgentsService] 加载技能失败: ${e?.message}`);
+    }
+
+    // 5) 流式生成，组装完整回复入库
+    const { stream, getAccumulated, getToolCalls } = await this.chatEngine.streamChat({
       llm: chatModel,
       history: msgs as any,
       systemPrompt: agent.systemPrompt || undefined,
+      tools,
     });
 
-    // 5) 异步保存 assistant 消息（流结束后）
+    // 6) 异步保存 assistant 消息（流结束后）
     //    注意：用户可能在流式期间并发删除 conversation → P2025，必须吞掉避免进程崩溃
     stream.on('end', () => {
       void (async () => {
         try {
           const fullText = getAccumulated();
+          const calls = getToolCalls();
           if (fullText) {
             await this.prisma.message.create({
               data: {
                 conversationId,
                 role: 'assistant',
                 content: fullText,
+                toolCalls: calls.length ? (calls as any) : undefined,
               },
             });
           }
@@ -171,6 +269,21 @@ export class AgentsService {
             where: { id: conversationId },
             data: { lastMessageAt: new Date() },
           });
+          // 关闭 chat Execution：标记成功，附带最终回复与工具调用次数
+          if (chatExecutionId) {
+            try {
+              await this.prisma.execution.update({
+                where: { id: chatExecutionId },
+                data: {
+                  status: 'success',
+                  outputJson: { toolCallCount: calls?.length || 0, hasText: !!fullText },
+                  finishedAt: new Date(),
+                },
+              });
+            } catch (e: any) {
+              if (e?.code !== 'P2025') this.logger.warn(`[AgentsService] close Execution 失败: ${e?.message}`);
+            }
+          }
         } catch (err: any) {
           if (err?.code !== 'P2025') {
             console.error('[AgentsService] persist assistant message failed:', err?.message);

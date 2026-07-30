@@ -84,6 +84,25 @@ const routes = [
     component: () => import('@/views/knowledge-bases/KBList.vue'),
     meta: { requiresAuth: true, permission: 'kb:list', title: '知识库', icon: 'Collection' },
   },
+
+  // 技能市场（Skills 工具市场）
+  {
+    path: '/skills',
+    component: () => import('@/layouts/RouterView.vue'), // 父级聚合 children
+    meta: { requiresAuth: true, permission: 'skill:list', title: '技能市场', icon: 'Cpu' },
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/skills/SkillList.vue'),
+        meta: { requiresAuth: true, permission: 'skill:list', title: '技能列表' },
+      },
+      {
+        path: 'invocations',
+        component: () => import('@/views/tools/ToolInvocationList.vue'),
+        meta: { requiresAuth: true, permission: 'execution:list', title: '调用记录' },
+      },
+    ],
+  },
   {
     path: '/knowledge-bases/:id',
     component: () => import('@/views/knowledge-bases/KBDetail.vue'),

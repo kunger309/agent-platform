@@ -4,6 +4,8 @@ import { PrismaService } from '../database/prisma.service';
 import { LlmService } from '../llm/llm.service';
 import { ChatEngine } from '../llm/engines/chat-engine';
 import { RetrieversService } from '../retrievers/retrievers.service';
+import { SkillExecutorService } from '../skills/skill-executor.service';
+import { SkillsService } from '../skills/skills.service';
 import { runWorkflowSafe } from './graph/compiler';
 import { CreateWorkflowDto, UpdateWorkflowDto, RunWorkflowDto } from './dto';
 
@@ -19,6 +21,9 @@ export class WorkflowsService {
     @Inject(forwardRef(() => ChatEngine))
     private readonly chatEngine: ChatEngine,
     private readonly retrievers: RetrieversService,
+    private readonly skills: SkillExecutorService,
+    // SkillsService 提供 getLatestVersion（handleSkill 需要）；SkillExecutorService 提供 executeByVersion
+    private readonly skillsCatalog: SkillsService,
   ) {}
 
   private readonly logger = new Logger(WorkflowsService.name);
@@ -174,6 +179,12 @@ export class WorkflowsService {
         llm: this.llm,
         chatEngine: this.chatEngine,
         retrievers: this.retrievers,
+        // 合并两个技能服务：getLatestVersion 来自 SkillsService，executeByVersion 来自 SkillExecutorService
+        skills: {
+          getLatestVersion: (id: string) => this.skillsCatalog.getLatestVersion(id),
+          executeByVersion: (v: any, input: any, opts?: any) =>
+            this.skills.executeByVersion(v, input, opts),
+        },
         emit: emitAndLog,
         runId: execution.id,
       },
