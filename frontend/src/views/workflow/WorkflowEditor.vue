@@ -77,8 +77,16 @@
                   <el-option v-for="m in llmModels" :key="m" :label="m" :value="m" />
                 </el-select>
               </el-form-item>
+              <el-form-item>
+                <el-checkbox v-model="selected.data.config.injectDbSchema">注入数据库上下文（推荐：用于 SQL 生成场景）</el-checkbox>
+                <div class="form-tip">开启后会把后端白名单表的清单自动拼到 systemPrompt，让 LLM 直接选对表（避免把"组织数"误算成 workflows.organization_id 的 distinct count）。</div>
+              </el-form-item>
               <el-form-item label="系统提示">
-                <el-input v-model="selected.data.config.systemPrompt" type="textarea" :rows="2" placeholder="可留空" />
+                <el-input v-model="selected.data.config.systemPrompt" type="textarea" :rows="3" placeholder="可留空；勾选上方注入数据库上下文会自动补充" />
+                <div v-if="selected.data.config.injectDbSchema" class="form-tip form-tip--preview">
+                  <div class="form-tip__label">自动注入内容预览：</div>
+                  <pre>{{ dbSchemaPrompt }}</pre>
+                </div>
               </el-form-item>
               <el-form-item label="提示词模板">
                 <el-input v-model="selected.data.config.promptTemplate" type="textarea" :rows="4" placeholder="如：把下面内容翻译为中文：{{input}}" />
@@ -303,6 +311,7 @@ import { listProviders } from '@/api/provider';
 import { listKnowledgeBases } from '@/api/knowledge-bases';
 import { listSkills } from '@/api/skills';
 import { NODE_TYPES, getNodeMeta } from './nodeMeta';
+import { buildDbSchemaPrompt } from './dbSchema';
 import WorkflowNode from './WorkflowNode.vue';
 
 const route = useRoute();
@@ -325,6 +334,9 @@ const drawer = ref(false);
 const selectedId = ref(null);
 
 const nodeTypes = { wf: markRaw(WorkflowNode) };
+
+// 注入到 LLM systemPrompt 的数据库 schema 文本（保持单例，computed 不会反复执行）
+const dbSchemaPrompt = computed(() => buildDbSchemaPrompt());
 
 // ---- 导入 / 导出 JSON ----
 const importVisible = ref(false);

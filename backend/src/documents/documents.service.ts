@@ -399,6 +399,47 @@ export class DocumentsService {
   }
 
   // ============================================================
+  // 下载（原始文件）
+  // ============================================================
+
+  /**
+   * 解析下载所需的字段：校验 org + KB + 文档存在，并返回磁盘绝对路径 + 文件名 + mime。
+   * 文件不在磁盘时抛 NotFoundException（前端可明确提示"原始文件丢失"）。
+   *
+   * 与 list/detail 不同：本方法返回 doc.fileId 绝对路径（而不是 toDTO 后的字段），
+   * controller 用此路径做流式发送。
+   */
+  async resolveForDownload(
+    organizationId: string,
+    knowledgeBaseId: string,
+    documentId: string,
+  ) {
+    const doc = await this.prisma.document.findFirst({
+      where: {
+        id: documentId,
+        knowledgeBaseId,
+        knowledgeBase: { organizationId },
+      },
+      select: {
+        id: true,
+        name: true,
+        originalName: true,
+        mimeType: true,
+        fileId: true,
+      },
+    });
+    if (!doc) throw new NotFoundException('文档不存在');
+    if (!doc.fileId || !fs.existsSync(doc.fileId)) {
+      throw new NotFoundException('原始文件丢失（可能已被清理）');
+    }
+    return {
+      absPath: doc.fileId,
+      fileName: doc.originalName || doc.name,
+      mimeType: doc.mimeType || 'application/octet-stream',
+    };
+  }
+
+  // ============================================================
   // 删除
   // ============================================================
 

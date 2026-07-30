@@ -14,7 +14,7 @@ export const NODE_TYPES = [
     icon: 'MagicStick',
     color: '#7c3aed',
     desc: '调用大模型生成文本',
-    defaultConfig: { promptTemplate: '{{input}}', systemPrompt: '', providerId: '', model: '' },
+    defaultConfig: { promptTemplate: '{{input}}', systemPrompt: '', providerId: '', model: '', injectDbSchema: false },
   },
   {
     type: 'answer',

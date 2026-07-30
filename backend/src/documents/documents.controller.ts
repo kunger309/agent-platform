@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Request,
+  Res,
   UploadedFile,
   UseInterceptors,
   Body,
@@ -13,6 +14,7 @@ import {
   Query,
   BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentsService } from './documents.service';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
@@ -95,6 +97,37 @@ export class DocumentsController {
       docId,
     );
     return { success: true, data };
+  }
+
+  /**
+   * 下载文档原文件（不切片、不解析，整文件流式回传）。
+   * 权限同 KB 读：kb:list。
+   * 中文文件名靠 Express res.download 自动用 RFC 5987 编码（filename*=UTF-8''...）。
+   */
+  @Get(':docId/download')
+  @RequirePermission('kb:list')
+  async download(
+    @Param('kbId') kbId: string,
+    @Param('docId') docId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const { absPath, fileName } = await this.docs.resolveForDownload(
+      req.user.currentOrgId,
+      kbId,
+      docId,
+    );
+    // res.download 会自动设置 Content-Type、Content-Disposition（含 RFC 5987 编码）、
+    // 处理 Range 请求 / 304 缓存等。callback 兜底异常。
+    res.download(absPath, fileName, (err) => {
+      if (err && !res.headersSent) {
+        // ★ 注意：Nest 用 @Res() 时它不会自动接管 res 生命周期，
+        //   callback 里只处理"还没开始发送"的错误；已经开始流的让连接自然断开。
+        res
+          .status(500)
+          .json({ success: false, message: '下载失败：' + (err?.message || err) });
+      }
+    });
   }
 
   @Post(':docId/retry')

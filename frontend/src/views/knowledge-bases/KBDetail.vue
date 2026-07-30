@@ -62,7 +62,7 @@
             <el-table-column label="切片" width="70" align="center">
               <template #default="{ row }">{{ row.chunkCount || 0 }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="200" fixed="right">
+            <el-table-column label="操作" width="240" fixed="right">
               <template #default="{ row }">
                 <el-button
                   size="small"
@@ -75,6 +75,13 @@
                   size="small"
                   @click="retryIt(row)"
                   >重试</el-button
+                >
+                <el-button
+                  size="small"
+                  :icon="Download"
+                  :loading="downloadingId === row.id"
+                  @click="downloadIt(row)"
+                  >下载</el-button
                 >
                 <el-button size="small" type="danger" @click="removeIt(row)">删除</el-button>
               </template>
@@ -177,8 +184,9 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Upload, Search } from '@element-plus/icons-vue';
+import { ArrowLeft, Upload, Search, Download } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { getToken } from '@/api/client';
 import {
   getKnowledgeBase,
   listDocuments,
@@ -200,6 +208,8 @@ const loadingDocs = ref(false);
 const uploading = ref(false);
 const retrieving = ref(false);
 const retrieveResult = ref(null);
+// 下载中的文档 id（用于按钮 loading 态，避免重复点击）
+const downloadingId = ref(null);
 
 const query = ref('');
 const topK = ref(5);
@@ -282,6 +292,73 @@ async function removeIt(row) {
   await removeDocument(kbId, row.id);
   ElMessage.success('已删除');
   await loadDocs();
+}
+
+/**
+ * 下载原文件：用 fetch + Authorization 头拿 blob，再用 <a download> 触发下载。
+ *
+ * 不能直接 <a href="/api/.../download"> 因为 axios 的拦截器注入 token；
+ * 而 <a> 不会带 Authorization。fetch + blob + objectURL 是最通用的方案。
+ *
+ * 服务端用 res.download() 自动设置 Content-Disposition（含 RFC 5987 中文编码），
+ * 因此后端响应头里带的 filename 才是"权威"，下面回退到 row.originalName 只是为了
+ * 服务端头缺失时的兜底。
+ */
+async function downloadIt(row) {
+  if (downloadingId.value) return;
+  downloadingId.value = row.id;
+  try {
+    const token = getToken();
+    const r = await fetch(`/api/knowledge-bases/${kbId}/documents/${row.id}/download`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!r.ok) {
+      // 服务端在 4xx/5xx 时返回 { success:false, message }，尽量把 message 提取出来
+      let msg = `下载失败（${r.status}）`;
+      try {
+        const j = await r.json();
+        if (j?.message) msg = j.message;
+      } catch (_) {}
+      ElMessage.error(msg);
+      return;
+    }
+    // 解析服务端给出的文件名（处理 RFC 5987）
+    const dispo = r.headers.get('Content-Disposition') || '';
+    const fileName = parseContentDispositionFileName(dispo) || row.originalName || row.name;
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // 延迟释放 URL，确保浏览器完成下载后再 revoke
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    ElMessage.error('下载失败：' + (e?.message || e));
+  } finally {
+    downloadingId.value = null;
+  }
+}
+
+/**
+ * 从 Content-Disposition 头解析 filename，优先 RFC 5987 的 filename*=UTF-8''xxx。
+ * 失败回退到普通 filename="..."。
+ */
+function parseContentDispositionFileName(header) {
+  if (!header) return null;
+  // filename*=UTF-8''<percent-encoded>  形式
+  const m5987 = header.match(/filename\*\s*=\s*([^']+)''([^;]+)/i);
+  if (m5987) {
+    try {
+      return decodeURIComponent(m5987[2]);
+    } catch (_) {}
+  }
+  // 普通 filename="..."
+  const m = header.match(/filename\s*=\s*"?([^";]+)"?/i);
+  return m ? m[1] : null;
 }
 
 // ============ 切片详情抽屉 ============

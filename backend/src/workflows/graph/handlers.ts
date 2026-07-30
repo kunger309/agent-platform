@@ -11,10 +11,61 @@ import type { HandlerCtx, HandlerResult } from './types';
 
 // ============ LLM 节点 ============
 // 复用 LlmService 解密 Provider + ChatEngine 流式；支持 promptTemplate / systemPrompt / providerId / model
+//
+// 注入数据库 schema 速查：当前端 LLM 节点 config.injectDbSchema=true 时，
+// 会把 buildDbSchemaBlock() 拼到 systemPrompt 里，让 LLM 在生成 SQL 时能选对表。
+// 表清单与 backend/src/internal/sql/sql.constants.ts 的 ALLOWED_TABLES 完全对齐，
+// 任何一边的改动都要同步另一边（白名单不让查的表，绝不能出现在 schema 里）。
+const DB_SCHEMA_BLOCK = `[数据库上下文] 当问题涉及"业务数据"时，必须按下面的表清单选表，禁止猜表名或编造字段。
+
+⚠️ 关键提醒：
+- "组织的个数 / 公司数量" → \`SELECT count(*) FROM organizations\`（直接 count 主表）
+- **不要**用 \`count(distinct organization_id) FROM workflows\` 这种"通过关联字段数"——它只能数到该组织下有工作流的数量，不是系统组织总数
+- 同理："用户数"用 \`count(*) FROM users\` 而不是 \`count(distinct user_id) FROM messages\`
+
+可查询的表（与后端白名单完全一致）：
+- \`users\` — 系统用户（登录账号、昵称、邮箱、手机、状态）| 关键字段: username, name, email, phone, status, isActive, lastLoginAt
+- \`organizations\` — 组织/部门（树形结构）。"组织的个数"应直接 count(*) 这张表，不要去数 workflows.organization_id 这种关联字段 | 关键字段: id, name, code, parentId, path, level, status
+- \`user_organizations\` — 多对多关联表：哪些用户属于哪些组织 | 关键字段: userId, organizationId, role
+- \`roles\` — RBAC 角色（管理员/普通用户/访客等）| 关键字段: name, code, description
+- \`permissions\` — 权限粒度（菜单/按钮/接口级别）| 关键字段: name, code, type, parentId
+- \`agents\` — AI Agent 实体（系统/组织/个人三级）| 关键字段: name, description, scope, ownerId, organizationId, status
+- \`agent_versions\` — 智能体的多版本（systemPrompt / 技能绑定）| 关键字段: agentId, version, systemPrompt
+- \`agent_skills\` — 多对多关联表 | 关键字段: agentId, skillId
+- \`skills\` — 技能市场里的技能（function 函数 / openapi 外部 API）| 关键字段: name, type, description, status
+- \`knowledge_bases\` — 知识库元数据 | 关键字段: name, description, ownerId, organizationId
+- \`documents\` — 知识库里的文档（file_name、解析状态、分块数）| 关键字段: kbId, originalName, parseStatus, chunkCount, sizeBytes
+- \`document_chunks\` — 文档被切分后的片段（用于 RAG 检索）| 关键字段: documentId, kbId, chunkIndex, content
+- \`conversations\` — 智能对话里的会话（一对多消息）| 关键字段: title, userId, agentId, kbId, mode
+- \`messages\` — 会话里的消息（用户/助手/系统）| 关键字段: conversationId, role, content, status
+- \`workflows\` — 工作流定义（**注意**：workflows 表里 organization_id 是"工作流归属的组织"，不是"系统组织数"）| 关键字段: name, description, scope, ownerId, organizationId, status
+- \`executions\` — 工作流 / 智能体 / 技能的运行实例 | 关键字段: workflowId, userId, agentId, status, durationMs
+- \`execution_logs\` — 每个节点 / 每个 step 的执行轨迹 | 关键字段: executionId, nodeId, level, message
+- \`llm_providers\` — LLM 提供商配置（OpenAI/DeepSeek/MiniMax 等）| 关键字段: name, providerType, defaultModel, isDefault
+- \`role_permissions\` — 角色↔权限关联表 | 关键字段: roleId, permissionId
+- \`user_roles\` — 用户↔角色关联表 | 关键字段: userId, roleId, organizationId
+- \`skill_versions\` — 技能多版本（代码/配置）| 关键字段: skillId, version, sourceCode, openapiSchema
+- \`files\` — 文件元数据 | 关键字段: name, mimeType, sizeBytes, ownerId
+- \`api_keys\` — API 密钥（对外调用的 key）| 关键字段: name, keyPrefix, scopes, status, ownerId
+- \`audit_logs\` — 审计日志（操作记录）| 关键字段: userId, action, resourceType, resourceId
+
+【输出要求】只输出一条合法的 SELECT/WITH 语句（以分号结尾可选），不夹带任何解释。下游 HTTP 节点会原样 POST 到 /api/internal/sql/query，所在机不通过则返回 400。`;
+
+function buildDbSchemaBlock(): string {
+  return DB_SCHEMA_BLOCK;
+}
+
 export async function handleLLM(ctx: HandlerCtx): Promise<HandlerResult> {
   const { state, config, deps, nodeId } = ctx;
   const prompt = interpolate(config?.promptTemplate || '{{input}}', state);
-  const system = config?.systemPrompt || undefined;
+  // 注入数据库 schema：默认开启（只有显式 injectDbSchema=false 才关闭），
+  // 解决"LLM 在没 schema 信息时凭表名瞎猜"的问题。
+  // 强制注入能让所有存量 LLM 节点都受益（不论前端是否已勾选），用户要关闭时显式设 false。
+  let system = config?.systemPrompt || undefined;
+  if (config?.injectDbSchema !== false) {
+    const schemaBlock = buildDbSchemaBlock();
+    system = system ? `${system}\n\n${schemaBlock}` : schemaBlock;
+  }
 
   // 解析 Provider
   let provider: any; // eslint-disable-line @typescript-eslint/no-explicit-any
