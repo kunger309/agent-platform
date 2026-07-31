@@ -17,6 +17,7 @@ import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
+import { SetFieldPermissionsDto } from './dto/set-field-permissions.dto';
 
 @Controller('roles')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -58,5 +59,27 @@ export class RolesController {
   async assignPermissions(@Param('id') id: string, @Body() dto: AssignPermissionsDto) {
     const role = await this.rolesService.assignPermissions(id, dto.permissionCodes);
     return { success: true, data: role };
+  }
+
+  /** 字段级权限：可脱敏资源字典 */
+  @Get('field-permissions/resources')
+  @RequirePermission('role:list')
+  async maskableResources() {
+    return { success: true, data: this.rolesService.listMaskableResources() };
+  }
+
+  @Get(':id/field-permissions')
+  @RequirePermission('role:list')
+  async listFieldPermissions(@Param('id') id: string) {
+    const items = await this.rolesService.listFieldPermissions(id);
+    return { success: true, data: items };
+  }
+
+  @Put(':id/field-permissions')
+  @RequirePermission('role:assign')
+  @HttpCode(200)
+  async setFieldPermissions(@Param('id') id: string, @Body() dto: SetFieldPermissionsDto) {
+    const items = await this.rolesService.setFieldPermissions(id, dto.items || []);
+    return { success: true, data: items };
   }
 }

@@ -21,6 +21,11 @@ import { SplittersModule } from './splitters/splitters.module';
 import { VectorStoreModule } from './vector-store/vector-store.module';
 import { SkillsModule } from './skills/skills.module';
 import { InternalModule } from './internal/internal.module';
+import { MetricsModule } from './metrics/metrics.module';
+import { CacheModule } from './cache/cache.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
+import { PublicApiModule } from './public-api/public-api.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -33,6 +38,8 @@ import { InternalModule } from './internal/internal.module';
     // 基础设施
     DatabaseModule,
     CommonModule,
+    CacheModule, // 全局：Redis / 内存降级缓存
+    MetricsModule, // 全局：Prometheus 指标
 
     // 业务模块
     AuthModule,
@@ -53,6 +60,9 @@ import { InternalModule } from './internal/internal.module';
     VectorStoreModule,
     SkillsModule,
     InternalModule,
+    ApiKeysModule,
+    PublicApiModule, // 对外开放 REST API（/api/v1/**，API Key 鉴权）
+    DashboardModule, // 工作台统计
 
     // 系统
     HealthModule,

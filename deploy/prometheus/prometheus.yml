@@ -1,0 +1,56 @@
+# Prometheus 抓取配置 —— agent-platform 后端监控
+#
+# 后端暴露两个端点：
+#   GET /api/metrics            (Prometheus 抓取，可配 METRICS_TOKEN 鉴权，见下)
+#   GET /api/monitor/summary    (前端看板用 JSON，需 JWT + monitor:view 权限)
+#
+# 默认指标前缀：agentx_ (业务) / agentx_node_ (Node 默认)
+# 所有指标都带常量 label：app="agent-platform"（与 Grafana 的 $app 变量对齐）
+#
+# 启动（本地）：
+#   prometheus --config.file=deploy/prometheus/prometheus.yml
+# Docker 启动：
+#   docker run -p 9090:9090 -v $PWD/deploy/prometheus:/etc/prometheus prom/prometheus
+
+global:
+  scrape_interval: 15s          # 抓取间隔
+  evaluation_interval: 15s      # 告警规则评估间隔
+  external_labels:
+    cluster: 'agent-platform-local'
+
+scrape_configs:
+  # 后端指标抓取任务
+  - job_name: 'agentx-backend'
+    metrics_path: /api/metrics
+    scheme: http
+    static_configs:
+      - targets: ['localhost:3000']
+        labels:
+          env: 'local'
+    # 若后端设置了 METRICS_TOKEN，取消下面两行注释，并将 token 写入该文件：
+    # authorization:
+    #   credentials_file: /etc/prometheus/metrics_token.txt
+
+  # (可选) 抓取 Prom 自身的指标，便于排查抓取链路
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+# ---- 可选：Docker / 容器网络场景 ----
+# 当 Prometheus 运行在容器内、后端在宿主机时，把 target 改成：
+#   - targets: ['host.docker.internal:3000']
+#
+# ---- 可选：告警规则示例 ----
+# rule_files:
+#   - 'alerts.yml'
+#
+# 示例 alerts.yml：
+# groups:
+#   - name: agentx
+#     rules:
+#       - alert: BackendDown
+#         expr: up{job="agentx-backend"} == 0
+#         for: 1m
+#         labels: { severity: critical }
+#         annotations:
+#           summary: "agent-platform 后端不可达"

@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
+import { RbacService } from '../rbac/rbac.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly rbac: RbacService,
   ) {}
 
   async login(username: string, password: string) {
@@ -46,7 +48,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
 
-    // 聚合权限码
+    // 聚合权限码（直接绑定的角色）
     const permissionCodes = new Set<string>();
     user.userRoles.forEach((ur) => {
       ur.role.rolePermissions.forEach((rp) => {
@@ -54,7 +56,15 @@ export class AuthService {
       });
     });
 
+    // 角色继承：把父角色（及祖先）的权限一并并入
+    const inherited = await this.rbac.resolvePermissionCodes(
+      user.userRoles.map((ur) => ur.roleId),
+    );
+    inherited.forEach((c) => permissionCodes.add(c));
+
     const roles = user.userRoles.map((ur) => ur.role.code);
+    // 字段级权限依赖角色 id，放进 token 便于后续无需再查库
+    const roleIds = user.userRoles.map((ur) => ur.roleId);
     const organizations = user.userOrganizations.map((uo) => ({
       id: uo.organizationId,
       name: uo.organization.name,
@@ -70,6 +80,7 @@ export class AuthService {
       avatar: user.avatar,
       isSuperAdmin: user.isSuperAdmin,
       roles,
+      roleIds,
       permissionCodes: Array.from(permissionCodes),
       organizations,
       currentOrgId: organizations.find((o) => o.isPrimary)?.id ?? organizations[0]?.id,

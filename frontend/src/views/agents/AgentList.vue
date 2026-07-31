@@ -59,12 +59,24 @@
         <el-form-item label="类型" prop="type">
           <el-radio-group v-model="form.type">
             <el-radio value="chat">聊天</el-radio>
-            <el-radio value="workflow" disabled>流程编排（Phase 2）</el-radio>
+            <el-radio value="workflow">流程编排</el-radio>
           </el-radio-group>
+          <div class="form-tip">聊天：基于大模型对话；流程编排：绑定一个工作流，对话即触发工作流执行。</div>
+        </el-form-item>
+        <el-form-item v-if="form.type === 'workflow'" label="选择工作流" prop="workflowId">
+          <el-select v-model="form.workflowId" placeholder="选择要绑定的已发布工作流" style="width: 100%">
+            <el-option v-for="w in workflows" :key="w.id" :label="`${w.name}（v${w.version}）`" :value="w.id" />
+          </el-select>
+          <div class="form-tip" v-if="!workflowsLoading && !workflows.length">
+            还没有已发布的工作流，请先到
+            <el-link type="primary" :underline="false" @click="router.push('/admin/workflows')">「工作流编排」</el-link>
+            页面创建并发布。
+          </div>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="2" />
         </el-form-item>
+        <template v-if="form.type === 'chat'">
         <el-form-item label="模型提供商" prop="providerId">
           <el-select v-model="form.providerId" placeholder="选择已配置的模型提供商" style="width: 100%" @change="onProviderChange">
             <el-option
@@ -110,6 +122,7 @@
           </el-select>
           <div class="form-tip">绑定后，对话中会按需自动调用这些技能（function 沙箱 / OpenAPI 请求）。</div>
         </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="dialog.visible = false">取消</el-button>
@@ -127,11 +140,14 @@ import { ElMessage } from 'element-plus';
 import { listProviders, PROVIDER_TYPES } from '@/api/provider';
 import { listAgents, getAgent, createAgent, updateAgent, deleteAgent } from '@/api/agent';
 import { listSkills, getAgentSkills, setAgentSkills } from '@/api/skills';
+import { listPublishedWorkflows } from '@/api/workflows';
 
 const router = useRouter();
 const list = ref([]);
 const providers = ref([]);
 const skills = ref([]); // 全部技能（用于编辑时绑定）
+const workflows = ref([]); // 仅已发布工作流（用于 workflow 类型选择）
+const workflowsLoading = ref(false);
 const loading = ref(false);
 const saving = ref(false);
 const formRef = ref(null);
@@ -146,14 +162,22 @@ const form = reactive({
   systemPrompt: '',
   temperature: 0.7,
   skillIds: [],
+  workflowId: '',
 });
 
-const rules = {
-  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
-  type: [{ required: true, message: '请选择类型', trigger: 'change' }],
-  providerId: [{ required: true, message: '请选择模型提供商', trigger: 'change' }],
-  model: [{ required: true, message: '请选择模型', trigger: 'change' }],
-};
+const rules = computed(() => {
+  const base = {
+    name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
+    type: [{ required: true, message: '请选择类型', trigger: 'change' }],
+  };
+  if (form.type === 'workflow') {
+    base.workflowId = [{ required: true, message: '请选择要绑定的工作流', trigger: 'change' }];
+  } else {
+    base.providerId = [{ required: true, message: '请选择模型提供商', trigger: 'change' }];
+    base.model = [{ required: true, message: '请选择模型', trigger: 'change' }];
+  }
+  return base;
+});
 
 const availableModels = computed(() => {
   const p = providers.value.find((x) => x.id === form.providerId);
@@ -185,12 +209,18 @@ function regeneratePromptFromSkills() {
 
 async function load() {
   loading.value = true;
+  workflowsLoading.value = true;
   try {
     [list.value, providers.value, skills.value] = await Promise.all([
       listAgents(),
       listProviders(),
       listSkills().catch(() => []),
     ]);
+    // 工作流下拉单独异步拉（仅已发布），失败不阻塞列表
+    listPublishedWorkflows()
+      .then((data) => { workflows.value = Array.isArray(data) ? data : []; })
+      .catch(() => { workflows.value = []; })
+      .finally(() => { workflowsLoading.value = false; });
     // 异步为每个草稿智能体检查发布条件（不阻塞列表渲染）
     for (const row of list.value) {
       if (row.status !== 'published') refreshPublishReady(row);
@@ -215,6 +245,7 @@ function openCreate() {
     systemPrompt: '',
     temperature: 0.7,
     skillIds: [],
+    workflowId: '',
   });
   // 默认 systemPrompt：基础人设 + 按当前已绑技能自动补「主动调用工具」段落
   applySkillPrompt('');
@@ -252,6 +283,7 @@ async function openEdit(row) {
       systemPrompt: detail.systemPrompt ?? '',
       temperature: typeof config.temperature === 'number' ? config.temperature : 0.7,
       skillIds: (bound || []).map((s) => s.skillId),
+      workflowId: detail.workflowId ?? '',
     });
   } catch (error) {
     dialog.visible = false;
@@ -267,13 +299,18 @@ async function saveIt() {
       name: form.name,
       type: form.type,
       description: form.description,
-      systemPrompt: form.systemPrompt,
-      modelConfig: {
+    };
+    if (form.type === 'workflow') {
+      payload.workflowId = form.workflowId;
+      // 流程编排智能体由工作流决定行为，无需 systemPrompt / 模型 / 技能绑定
+    } else {
+      payload.systemPrompt = form.systemPrompt;
+      payload.modelConfig = {
         providerId: form.providerId,
         model: form.model,
         temperature: form.temperature,
-      },
-    };
+      };
+    }
     let agentId = dialog.id;
     if (dialog.editing) {
       await updateAgent(dialog.id, payload);
@@ -281,8 +318,8 @@ async function saveIt() {
       const created = await createAgent(payload);
       agentId = created?.id || created?.data?.id;
     }
-    // 同步技能绑定（全量替换语义）
-    if (agentId) {
+    // 同步技能绑定（仅聊天类型需要；全量替换语义）
+    if (agentId && form.type === 'chat') {
       try {
         await setAgentSkills(
           agentId,
@@ -358,11 +395,15 @@ const publishReady = ref({}); // id -> {ok, reason}
 async function refreshPublishReady(row) {
   try {
     const detail = await getAgent(row.id);
-    const cfg = detail?.modelConfig && typeof detail.modelConfig === 'object' ? detail.modelConfig : {};
     const reasons = [];
     if (!detail?.name) reasons.push('名称');
-    if (!cfg.providerId) reasons.push('Provider');
-    if (!cfg.model) reasons.push('模型');
+    if (detail?.type === 'workflow') {
+      if (!detail.workflowId) reasons.push('工作流');
+    } else {
+      const cfg = detail?.modelConfig && typeof detail.modelConfig === 'object' ? detail.modelConfig : {};
+      if (!cfg.providerId) reasons.push('Provider');
+      if (!cfg.model) reasons.push('模型');
+    }
     publishReady.value[row.id] = reasons.length
       ? { ok: false, reason: `需补充：${reasons.join('、')}` }
       : { ok: true, reason: '' };

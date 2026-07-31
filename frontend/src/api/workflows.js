@@ -6,6 +6,8 @@
 import client from './client';
 
 export const listWorkflows = () => client.get('/workflows');
+/** 仅返回已发布工作流（用于智能体绑定下拉）。后端 /api/workflows/published 独立端点。 */
+export const listPublishedWorkflows = () => client.get('/workflows/published');
 export const getWorkflow = (id) => client.get(`/workflows/${id}`);
 export const createWorkflow = (data) => client.post('/workflows', data);
 export const updateWorkflow = (id, data) => client.patch(`/workflows/${id}`, data);

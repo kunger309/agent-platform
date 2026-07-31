@@ -19,4 +19,9 @@ export class UpdateRoleDto {
   @IsArray()
   @IsString({ each: true })
   permissionCodes?: string[];
+
+  /** 父角色 id；传空字符串表示解除继承 */
+  @IsOptional()
+  @IsString()
+  parentId?: string;
 }

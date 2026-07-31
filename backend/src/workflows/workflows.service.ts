@@ -6,8 +6,10 @@ import { ChatEngine } from '../llm/engines/chat-engine';
 import { RetrieversService } from '../retrievers/retrievers.service';
 import { SkillExecutorService } from '../skills/skill-executor.service';
 import { SkillsService } from '../skills/skills.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { runWorkflowSafe } from './graph/compiler';
 import { CreateWorkflowDto, UpdateWorkflowDto, RunWorkflowDto } from './dto';
+import { WorkflowStatus } from '@prisma/client';
 
 const EMPTY_GRAPH = { nodes: [], edges: [] };
 
@@ -24,13 +26,17 @@ export class WorkflowsService {
     private readonly skills: SkillExecutorService,
     // SkillsService 提供 getLatestVersion（handleSkill 需要）；SkillExecutorService 提供 executeByVersion
     private readonly skillsCatalog: SkillsService,
+    private readonly metrics: MetricsService,
   ) {}
 
   private readonly logger = new Logger(WorkflowsService.name);
 
-  async list(organizationId: string) {
+  async list(organizationId: string, status?: WorkflowStatus) {
     return this.prisma.workflow.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(status ? { status } : {}),
+      },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -43,6 +49,11 @@ export class WorkflowsService {
         creatorId: true,
       },
     });
+  }
+
+  /** 仅返回已发布工作流（status='published'）—— 用于智能体绑定下拉，避免选到草稿/已归档。 */
+  async listPublished(organizationId: string) {
+    return this.list(organizationId, WorkflowStatus.published);
   }
 
   async detail(id: string, organizationId: string) {
@@ -200,6 +211,12 @@ export class WorkflowsService {
           : { status: 'success', outputJson: { output: result.output, variables: result.variables }, finishedAt: new Date() },
       })
       .catch((e) => this.logger.warn(`[WorkflowsService] finalize execution failed: ${e?.message}`));
+
+    this.metrics.observeWorkflowRun(
+      id,
+      result.error ? 'error' : 'success',
+      Date.now() - (execution.startedAt?.getTime() ?? Date.now()),
+    );
 
     return execution.id;
   }

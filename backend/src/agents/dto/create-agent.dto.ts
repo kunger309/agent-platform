@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsObject,
   IsIn,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateAgentDto {
@@ -24,16 +25,20 @@ export class CreateAgentDto {
   systemPrompt?: string;
 
   /**
-   * 模型配置：
-   * {
-   *   providerId: string,  // LlmProvider.id
-   *   model: string,       // 模型名
-   *   temperature?: number, // 0~1, 默认 0.7
-   *   maxTokens?: number,
-   * }
+   * 仅 type=workflow 必填：绑定的流程编排工作流 ID。必须属同一组织。
    */
+  @ValidateIf((o: CreateAgentDto) => o.type === 'workflow')
+  @IsString()
+  @IsNotEmpty({ message: 'type=workflow 时必须指定 workflowId' })
+  workflowId?: string;
+
+  /**
+   * 模型配置：仅 type=chat 必填。
+   * 由 service 层校验 providerId/model 是否存在（DTO 不深校验嵌套字段）。
+   */
+  @ValidateIf((o: CreateAgentDto) => o.type === 'chat')
   @IsObject()
-  modelConfig: {
+  modelConfig?: {
     providerId: string;
     model: string;
     temperature?: number;
@@ -44,6 +49,7 @@ export class CreateAgentDto {
 export class UpdateAgentDto {
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   name?: string;
 
   @IsOptional()
@@ -58,6 +64,10 @@ export class UpdateAgentDto {
   @IsOptional()
   @IsString()
   systemPrompt?: string;
+
+  @IsOptional()
+  @IsString()
+  workflowId?: string;
 
   @IsOptional()
   @IsObject()

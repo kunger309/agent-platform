@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 
 /**
@@ -6,9 +6,147 @@ import { PrismaService } from '../database/prisma.service';
  */
 export type DataScope = 'ALL' | 'ORG' | 'ORG_AND_CHILDREN' | 'SELF' | 'CUSTOM';
 
+/** 字段级权限策略 */
+export type FieldAccess = 'visible' | 'masked' | 'hidden';
+
+export interface FieldPolicy {
+  resource: string;
+  field: string;
+  access: FieldAccess;
+}
+
 @Injectable()
 export class RbacService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // ==================== 角色继承 ====================
+
+  /**
+   * 展开角色继承链：给定一组角色 id，返回其自身 + 所有祖先角色 id。
+   *
+   * 语义：子角色自动拥有父角色的全部权限（权限并集，只增不减），
+   * 这样"部门主管 = 编辑者 + 审批权"这类模型无需重复勾选。
+   */
+  async expandRoleIds(roleIds: string[]): Promise<string[]> {
+    if (!roleIds?.length) return [];
+
+    const all = await this.prisma.role.findMany({
+      select: { id: true, parentId: true },
+    });
+    const parentOf = new Map(all.map((r) => [r.id, r.parentId]));
+
+    const result = new Set<string>();
+    for (const start of roleIds) {
+      let cur: string | null | undefined = start;
+      // 深度上限兜底，即使库里存在脏数据成环也不会死循环
+      let depth = 0;
+      while (cur && !result.has(cur) && depth < 32) {
+        result.add(cur);
+        cur = parentOf.get(cur) ?? null;
+        depth++;
+      }
+    }
+    return Array.from(result);
+  }
+
+  /**
+   * 解析角色（含继承）对应的权限码集合。
+   * 登录签发 JWT 时调用，保证 token 里的 permissionCodes 已含继承结果。
+   */
+  async resolvePermissionCodes(roleIds: string[]): Promise<string[]> {
+    const expanded = await this.expandRoleIds(roleIds);
+    if (!expanded.length) return [];
+
+    const rows = await this.prisma.rolePermission.findMany({
+      where: { roleId: { in: expanded } },
+      select: { permission: { select: { code: true } } },
+    });
+    return Array.from(new Set(rows.map((r) => r.permission.code)));
+  }
+
+  /**
+   * 设置角色的父角色前必须校验：不能指向自己，也不能形成环。
+   */
+  async assertNoRoleCycle(roleId: string, parentId: string | null) {
+    if (!parentId) return;
+    if (parentId === roleId) {
+      throw new BadRequestException('父角色不能是自己');
+    }
+    const ancestors = await this.expandRoleIds([parentId]);
+    if (ancestors.includes(roleId)) {
+      throw new BadRequestException('角色继承不能成环');
+    }
+  }
+
+  // ==================== 字段级权限 ====================
+
+  /**
+   * 取某组角色（含继承）在某资源上的字段策略。
+   * 多角色冲突时取**最宽松**：visible > masked > hidden，
+   * 与"权限并集"的整体语义保持一致。
+   */
+  async resolveFieldPolicies(
+    roleIds: string[],
+    resource: string,
+  ): Promise<Map<string, FieldAccess>> {
+    const map = new Map<string, FieldAccess>();
+    const expanded = await this.expandRoleIds(roleIds);
+    if (!expanded.length) return map;
+
+    const rows = await this.prisma.fieldPermission.findMany({
+      where: { roleId: { in: expanded }, resource },
+      select: { field: true, access: true },
+    });
+
+    const rank: Record<string, number> = { hidden: 0, masked: 1, visible: 2 };
+    for (const r of rows) {
+      const cur = map.get(r.field);
+      const next = (r.access as FieldAccess) || 'masked';
+      if (!cur || rank[next] > rank[cur]) map.set(r.field, next);
+    }
+    return map;
+  }
+
+  /**
+   * 按字段策略处理返回数据（原地生成副本，不改入参）。
+   * - hidden：删除该字段
+   * - masked：按字符串长度做保留首尾的掩码
+   * - visible / 未配置：原样返回
+   */
+  applyFieldPolicies<T>(data: T, policies: Map<string, FieldAccess>): T {
+    if (!policies.size || data == null) return data;
+
+    const maskOne = (obj: any): any => {
+      if (Array.isArray(obj)) return obj.map(maskOne);
+      if (!obj || typeof obj !== 'object') return obj;
+
+      const copy: any = { ...obj };
+      for (const [field, access] of policies) {
+        if (!(field in copy)) continue;
+        if (access === 'hidden') delete copy[field];
+        else if (access === 'masked') copy[field] = this.maskValue(copy[field]);
+      }
+      // 常见分页包装：{ items: [...] } / { list: [...] }
+      if (Array.isArray(copy.items)) copy.items = copy.items.map(maskOne);
+      if (Array.isArray(copy.list)) copy.list = copy.list.map(maskOne);
+      return copy;
+    };
+
+    return maskOne(data);
+  }
+
+  private maskValue(v: any): any {
+    if (v == null) return v;
+    const s = String(v);
+    if (!s) return s;
+    // 邮箱：保留首字符与域名
+    if (s.includes('@')) {
+      const [name, domain] = s.split('@');
+      return `${name.slice(0, 1)}***@${domain}`;
+    }
+    if (s.length <= 4) return '****';
+    return `${s.slice(0, 2)}****${s.slice(-2)}`;
+  }
 
   /**
    * 检查用户是否拥有指定权限码

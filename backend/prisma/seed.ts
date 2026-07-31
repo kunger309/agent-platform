@@ -88,6 +88,17 @@ const PERMISSIONS: Array<{
   // 执行记录
   { code: 'execution', name: '执行记录', type: 'menu', sort: 50 },
   { code: 'execution:list', name: '查看执行', type: 'api', parentCode: 'execution', sort: 1 },
+
+  // API Key（对外开放 API 凭据）
+  { code: 'apikey', name: 'API 密钥', type: 'menu', sort: 60 },
+  { code: 'apikey:list', name: '查看密钥', type: 'api', parentCode: 'apikey', sort: 1 },
+  { code: 'apikey:create', name: '创建密钥', type: 'button', parentCode: 'apikey', sort: 2 },
+  { code: 'apikey:edit', name: '编辑/轮换/吊销密钥', type: 'button', parentCode: 'apikey', sort: 3 },
+  { code: 'apikey:delete', name: '删除密钥', type: 'button', parentCode: 'apikey', sort: 4 },
+
+  // 监控
+  { code: 'monitor', name: '系统监控', type: 'menu', sort: 70 },
+  { code: 'monitor:view', name: '查看监控面板', type: 'api', parentCode: 'monitor', sort: 1 },
 ];
 
 // ============================================================
@@ -114,6 +125,8 @@ const BUILTIN_ROLES = [
       'skill', 'skill:list', 'skill:create', 'skill:edit', 'skill:delete', 'skill:install',
       'provider', 'provider:list', 'provider:create', 'provider:edit',
       'execution', 'execution:list',
+      'apikey', 'apikey:list', 'apikey:create', 'apikey:edit', 'apikey:delete',
+      'monitor', 'monitor:view',
     ],
   },
   {

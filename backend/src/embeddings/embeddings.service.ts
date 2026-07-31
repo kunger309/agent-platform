@@ -4,8 +4,11 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import { EncryptionService } from '../common/services/encryption.service';
+import { CacheService } from '../cache/cache.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { PROVIDER_DEFAULTS } from '../llm/adapters/openai-compatible.adapter';
 
 /** 单次请求允许的最大文本数（OpenAI /embeddings 限制） */
@@ -14,6 +17,8 @@ const MAX_BATCH = 100;
 const MAX_TEXT_LEN = 8000;
 /** 单次请求超时（毫秒） */
 const REQUEST_TIMEOUT_MS = 60_000;
+/** 向量缓存有效期：7 天（同一 provider+model+文本的向量是确定性的） */
+const CACHE_TTL_SECONDS = 7 * 24 * 3600;
 
 export interface EmbeddingResult {
   /** 输入文本数组 */
@@ -42,7 +47,24 @@ export class EmbeddingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
+    private readonly cache: CacheService,
+    private readonly metrics: MetricsService,
   ) {}
+
+  /**
+   * 缓存键：provider + model + purpose + 文本摘要。
+   * 同一段文本在同一模型下向量是确定性的，因此可长期缓存；
+   * purpose 参与是因为 MiniMax 的 db/query 会产出不同向量。
+   */
+  private cacheKey(
+    providerId: string,
+    model: string,
+    purpose: string,
+    text: string,
+  ): string {
+    const digest = createHash('sha256').update(text).digest('hex').slice(0, 32);
+    return `emb:${providerId}:${model}:${purpose}:${digest}`;
+  }
 
   /**
    * 把一组文本转成向量（自动批处理）
@@ -66,23 +88,69 @@ export class EmbeddingsService {
     const provider = await this.loadProvider(providerId, organizationId);
 
     const t0 = Date.now();
-    const vectors: number[][] = [];
-    for (let i = 0; i < input.length; i += MAX_BATCH) {
-      const batch = input.slice(i, i + MAX_BATCH).map((s) => this.truncate(s));
-      const batchVecs = await this.callEmbeddingsApi(
-        provider.providerType,
-        provider.baseUrl,
-        provider.apiKey,
-        model,
-        batch,
-        purpose,
-      );
-      vectors.push(...batchVecs);
+    const texts = input.map((s) => this.truncate(s));
+
+    // 1) 查缓存。同批内重复文本只算一次，命中的直接复用
+    const keys = texts.map((t) => this.cacheKey(providerId, model, purpose, t));
+    const cached = await this.cache.mget<number[]>(keys);
+
+    const vectors: (number[] | null)[] = cached.map((v) =>
+      Array.isArray(v) && v.length ? v : null,
+    );
+
+    // 2) 收集未命中的唯一文本（同批重复文本合并成一次请求）
+    const missGroups = new Map<string, { text: string; indices: number[] }>();
+    for (let i = 0; i < texts.length; i++) {
+      if (vectors[i]) continue;
+      const k = keys[i];
+      const g = missGroups.get(k);
+      if (g) g.indices.push(i);
+      else missGroups.set(k, { text: texts[i], indices: [i] });
+    }
+
+    const hitCount = texts.length - Array.from(missGroups.values()).reduce((n, g) => n + g.indices.length, 0);
+    for (let i = 0; i < hitCount; i++) this.metrics.observeEmbedding('hit');
+
+    // 3) 未命中的走真实接口（仍按 MAX_BATCH 分批）
+    if (missGroups.size) {
+      const missKeys = Array.from(missGroups.keys());
+      const missTexts = missKeys.map((k) => missGroups.get(k)!.text);
+      const fresh: number[][] = [];
+
+      for (let i = 0; i < missTexts.length; i += MAX_BATCH) {
+        const batch = missTexts.slice(i, i + MAX_BATCH);
+        try {
+          const batchVecs = await this.callEmbeddingsApi(
+            provider.providerType,
+            provider.baseUrl,
+            provider.apiKey,
+            model,
+            batch,
+            purpose,
+          );
+          fresh.push(...batchVecs);
+          for (let j = 0; j < batch.length; j++) this.metrics.observeEmbedding('miss');
+        } catch (e) {
+          for (let j = 0; j < batch.length; j++)
+            this.metrics.observeEmbedding('miss', 'error');
+          throw e;
+        }
+      }
+
+      // 4) 回填缓存 + 填回结果位
+      const toCache: Array<{ key: string; value: number[] }> = [];
+      missKeys.forEach((k, idx) => {
+        const vec = fresh[idx];
+        if (!vec) return;
+        toCache.push({ key: k, value: vec });
+        for (const pos of missGroups.get(k)!.indices) vectors[pos] = vec;
+      });
+      await this.cache.mset(toCache, CACHE_TTL_SECONDS);
     }
 
     return {
       input,
-      vectors,
+      vectors: vectors.map((v) => v || []),
       model,
       providerName: provider.name,
       durationMs: Date.now() - t0,

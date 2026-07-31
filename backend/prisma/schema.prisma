@@ -108,13 +108,35 @@ model Role {
   description String?
   isBuiltin   Boolean    @default(false) @map("is_builtin")
   dataScope   DataScope? @map("data_scope") // 角色默认数据范围（用户级可覆盖）
+  parentId    String?    @map("parent_id") // 角色继承：自动获得父角色的全部权限
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
-  rolePermissions RolePermission[]
-  userRoles       UserRole[]
+  parent   Role?  @relation("RoleTree", fields: [parentId], references: [id])
+  children Role[] @relation("RoleTree")
 
+  rolePermissions  RolePermission[]
+  userRoles        UserRole[]
+  fieldPermissions FieldPermission[]
+
+  @@index([parentId])
   @@map("roles")
+}
+
+/// 字段级权限：控制某角色读取某资源时，敏感字段是否可见 / 脱敏
+model FieldPermission {
+  id        String   @id @default(cuid())
+  roleId    String   @map("role_id")
+  resource  String // 资源标识：user / agent / llm_provider / api_key ...
+  field     String // 字段名：email / phone / apiKey ...
+  access    String   @default("masked") // masked 脱敏 | hidden 隐藏 | visible 明文
+  createdAt DateTime @default(now()) @map("created_at")
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, resource, field])
+  @@index([resource])
+  @@map("field_permissions")
 }
 
 enum PermissionType {
@@ -223,12 +245,14 @@ model Agent {
   description     String?
   avatar          String?
   systemPrompt    String      @default("") @map("system_prompt")
-  modelConfig     Json        @default("{}") @map("model_config") // { providerId, model, temperature, ... }
+  modelConfig     Json        @default("{}") @map("model_config") // { providerId, model, temperature, ... }，仅 chat 类型必填
+  workflowId      String?     @map("workflow_id") // 仅 workflow 类型必填：绑定的流程编排工作流
   status          AgentStatus @default(draft)
   publishedVersion Int        @default(0) @map("published_version")
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
+  workflow      Workflow?     @relation("AgentBoundWorkflow", fields: [workflowId], references: [id], onDelete: SetNull)
   versions      AgentVersion[]
   agentSkills   AgentSkill[]
   conversations Conversation[]
@@ -236,6 +260,7 @@ model Agent {
 
   @@index([organizationId, type])
   @@index([creatorId])
+  @@index([workflowId])
   @@map("agents")
 }
 
@@ -450,8 +475,9 @@ model Workflow {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
-  agent      Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  executions Execution[]
+  agent        Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  boundAgents  Agent[]     @relation("AgentBoundWorkflow") // workflow 类型智能体反向引用
+  executions   Execution[]
   conversations Conversation[]
 
   @@index([organizationId])

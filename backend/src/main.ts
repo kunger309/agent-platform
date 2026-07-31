@@ -9,6 +9,8 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { MetricsInterceptor } from './metrics/metrics.interceptor';
+import { FieldMaskInterceptor } from './common/interceptors/field-mask.interceptor';
 
 const bootLogger = new Logger('Bootstrap');
 
@@ -64,12 +66,18 @@ async function bootstrap() {
     new PermissionsGuard(reflector),
   );
 
+  // 全局拦截器（顺序：指标统计 → 字段级脱敏，脱敏在最后一层改写响应体）
+  app.useGlobalInterceptors(
+    app.get(MetricsInterceptor),
+    app.get(FieldMaskInterceptor),
+  );
+
   // CORS
   app.enableCors({
     origin: corsOrigin.split(',').map((s) => s.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-API-Key'],
   });
 
   // 静态托管上传文件（图片/文档），供前端 <img src="/uploads/xxx"> 访问

@@ -5,9 +5,11 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ResetPasswordDto } from './dto/update-user.dto';
+import { MaskResource } from '../common/decorators/mask-resource.decorator';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@MaskResource('user')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

@@ -16,3 +16,6 @@ export * from './organizations';
 export * from './permissions';
 export * from './provider';
 export * from './agent';
+export * from './api-keys';
+export * from './monitor';
+export * from './dashboard';

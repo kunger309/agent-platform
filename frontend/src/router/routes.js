@@ -49,6 +49,16 @@ const routes = [
         component: () => import('@/views/admin/roles/RoleList.vue'),
         meta: { requiresAuth: true, permission: 'role:list', title: '角色管理', icon: 'UserFilled' },
       },
+      {
+        path: 'api-keys',
+        component: () => import('@/views/admin/api-keys/ApiKeyList.vue'),
+        meta: { requiresAuth: true, permission: 'apikey:list', title: 'API 密钥', icon: 'Key' },
+      },
+      {
+        path: 'monitor',
+        component: () => import('@/views/admin/monitor/MonitorDashboard.vue'),
+        meta: { requiresAuth: true, permission: 'monitor:view', title: '系统监控', icon: 'Odometer' },
+      },
     ],
   },
 

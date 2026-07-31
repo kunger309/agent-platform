@@ -6,15 +6,24 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Request,
   Res,
   HttpCode,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { WorkflowStatus } from '@prisma/client';
 import { WorkflowsService } from './workflows.service';
 import { CreateWorkflowDto, UpdateWorkflowDto, RunWorkflowDto } from './dto';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
+
+const ALLOWED_STATUS_FILTERS: ReadonlySet<WorkflowStatus> = new Set([
+  WorkflowStatus.draft,
+  WorkflowStatus.published,
+  WorkflowStatus.archived,
+]);
 
 @Controller('workflows')
 export class WorkflowsController {
@@ -23,8 +32,26 @@ export class WorkflowsController {
 
   @Get()
   @RequirePermission('workflow:list')
-  async list(@Request() req: any) {
-    const data = await this.workflows.list(req.user.currentOrgId);
+  async list(@Request() req: any, @Query('status') status?: string) {
+    let statusFilter: WorkflowStatus | undefined;
+    if (status) {
+      if (!ALLOWED_STATUS_FILTERS.has(status as WorkflowStatus)) {
+        throw new BadRequestException(`非法 status 过滤值: ${status}`);
+      }
+      statusFilter = status as WorkflowStatus;
+    }
+    const data = await this.workflows.list(req.user.currentOrgId, statusFilter);
+    return { success: true, data };
+  }
+
+  /**
+   * 仅返回已发布工作流（用于智能体绑定下拉）。
+   * 独立端点避免 status 参数被误用过滤到草稿。
+   */
+  @Get('published')
+  @RequirePermission('workflow:list')
+  async listPublished(@Request() req: any) {
+    const data = await this.workflows.listPublished(req.user.currentOrgId);
     return { success: true, data };
   }
 

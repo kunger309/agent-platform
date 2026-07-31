@@ -24,4 +24,9 @@ export class CreateRoleDto {
   @IsArray()
   @IsString({ each: true })
   permissionCodes?: string[];
+
+  /** 父角色 id：自动继承其全部权限 */
+  @IsOptional()
+  @IsString()
+  parentId?: string;
 }

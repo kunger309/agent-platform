@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { runJsInSandbox } from './js-sandbox';
 import {
   parseOpenApiDocument,
@@ -35,7 +36,10 @@ export interface ExecuteOptions {
 export class SkillExecutorService {
   private readonly logger = new Logger(SkillExecutorService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metrics: MetricsService,
+  ) {}
 
   async executeByVersion(
     version: any,
@@ -66,6 +70,12 @@ export class SkillExecutorService {
     }
 
     const durationMs = Date.now() - started;
+
+    this.metrics.observeSkillInvocation(
+      version?.skillId || 'unknown',
+      status === 'success' ? 'success' : 'error',
+      durationMs,
+    );
 
     if (opts.executionId) {
       try {

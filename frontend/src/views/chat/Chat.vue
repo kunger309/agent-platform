@@ -132,8 +132,13 @@
 
               <!-- 助手消息 -->
               <div v-else class="msg-bubble ai-bubble">
+                <!-- 断线重连提示：仅在尚未产生内容时出现，重连成功后自动消失 -->
+                <div v-if="m.reconnecting" class="reconnect-hint">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  <span>{{ m.reconnecting }}</span>
+                </div>
                 <!-- 思考中：loading 占位（首个 delta 未到达） -->
-                <div v-if="m.phase === 'thinking' && !m.content" class="thinking-loader">
+                <div v-if="m.phase === 'thinking' && !m.content && !m.reconnecting" class="thinking-loader">
                   <span class="dot"></span><span class="dot"></span><span class="dot"></span>
                   <span class="thinking-text">
                     AI 正在思考<span v-if="(m.elapsed || 0) >= 1">（{{ m.elapsed }}s）</span>…
@@ -351,7 +356,7 @@
 import { ref, reactive, computed, nextTick, onMounted } from 'vue';
 import {
   Plus, Close, ChatDotRound, MagicStick, UploadFilled, Document, VideoPause,
-  Switch, Connection, Collection, CaretBottom,
+  Switch, Connection, Collection, CaretBottom, Loading,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -703,6 +708,8 @@ function send() {
     attachments: [],
     sources: [], // KB 检索来源（首个 delta 之前由 onSources 注入）
     sourcesOpen: false, // 是否展开来源面板
+    reconnecting: '', // 断线重连提示文案；空串表示连接正常
+    interrupted: false, // 已输出部分内容后断流（不可自动重放）
   });
   session.messages.push(aiMsg);
   startTyper(aiMsg); // 启动打字机：随 deltas 到达逐字 reveal
@@ -743,7 +750,17 @@ function send() {
       onThinking: () => {
         // keepalive 心跳：保持 thinking 状态
       },
+      onRetry: (n, delay) => {
+        // 断线自动重连（仅发生在还没吐出任何内容时，重放是安全的）
+        aiMsg.reconnecting = `连接中断，${Math.round(delay / 1000) || 1} 秒后第 ${n} 次重连…`;
+      },
+      onInterrupted: () => {
+        // 已输出部分内容后断流：不能自动重放（会重复），提示用户手动重发
+        aiMsg.interrupted = true;
+        aiMsg.content += '\n\n> ⚠️ 连接中断，回答未输出完整。可点击重新发送继续。';
+      },
       onDelta: (d) => {
+        aiMsg.reconnecting = '';
         aiMsg.content += d;
         if (aiMsg.phase === 'thinking') {
           aiMsg.phase = 'streaming';
@@ -752,6 +769,7 @@ function send() {
       },
       onDone: () => {
         aiMsg.phase = 'done';
+        aiMsg.reconnecting = '';
         aiMsg.display = aiMsg.content; // 追平，打字机结束
         stopTyper();
         streaming.value = false;
@@ -763,6 +781,7 @@ function send() {
       onError: (msg) => {
         aiMsg.content += `\n\n[错误] ${msg}`;
         aiMsg.phase = 'done';
+        aiMsg.reconnecting = '';
         aiMsg.display = aiMsg.content;
         stopTyper();
         streaming.value = false;
@@ -1145,6 +1164,15 @@ function removeKb(id) {
   max-width: 200px;
 }
 .ai-bubble .attach-file { background: #f5f7fa; color: #606266; }
+
+/* 断线重连提示条 */
+.reconnect-hint {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; margin-bottom: 6px;
+  border-radius: 6px; font-size: 13px;
+  color: var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
+}
 
 /* thinking loader: 三球 loading + 文字 */
 .thinking-loader {

@@ -1,4 +1,5 @@
 import client from './client';
+import { sseStream } from '@/utils/sse-stream';
 
 export const listAgents = () => client.get('/agents');
 export const getAgent = (id) => client.get(`/agents/${id}`);
@@ -7,74 +8,49 @@ export const updateAgent = (id, data) => client.patch(`/agents/${id}`, data);
 export const deleteAgent = (id) => client.delete(`/agents/${id}`);
 
 /**
- * 流式对话（使用 fetch + ReadableStream）
+ * 智能体流式对话（fetch + ReadableStream，带断线自动重连）
+ *
+ * 重连语义见 utils/sse-stream.js：
+ *   - 未产生任何内容时断线 → 自动重试（最多 3 次，指数退避）
+ *   - 已输出部分内容后断线 → 触发 onInterrupted，不自动重放（避免重复内容与重复计费）
+ *
  * @param {string} agentId
  * @param {object} payload { message, conversationId? }
- * @param {object} callbacks { onDelta, onConversationId, onDone, onError }
- * @returns {AbortController} 用于中断
+ * @param {object} callbacks { onDelta, onConversationId, onThinking, onDone, onError, onRetry, onInterrupted }
+ * @returns {{ abort: () => void }} 用于中断
  */
 export function chatStream(agentId, payload, callbacks = {}) {
-  const controller = new AbortController();
   const token = localStorage.getItem('agent_platform_token');
+  let errored = false;
 
-  fetch(`/api/agents/${agentId}/chat`, {
-    method: 'POST',
+  return sseStream({
+    url: `/api/agents/${agentId}/chat`,
     headers: {
       'Content-Type': 'application/json',
       Authorization: token ? `Bearer ${token}` : '',
-      Accept: 'text/event-stream',
     },
-    body: JSON.stringify(payload),
-    signal: controller.signal,
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        let msg = `HTTP ${res.status}`;
-        try {
-          const data = await res.json();
-          msg = data?.message || msg;
-        } catch (_) {}
-        throw new Error(msg);
+    makeBody: () => JSON.stringify(payload),
+    onRetry: (n, delay) => callbacks.onRetry?.(n, delay),
+    onInterrupted: (chars) => {
+      callbacks.onInterrupted?.(chars);
+      if (!errored) callbacks.onDone?.();
+    },
+    onError: (msg) => { errored = true; callbacks.onError?.(msg); },
+    onFinish: () => { if (!errored) callbacks.onDone?.(); },
+    onEvent: (data) => {
+      if (data.conversationId) {
+        callbacks.onConversationId?.(data.conversationId);
+      } else if (data.thinking) {
+        // 后端 keepalive 心跳：模型还在思考中
+        callbacks.onThinking?.();
+      } else if (data.delta !== undefined) {
+        callbacks.onDelta?.(data.delta);
+      } else if (data.done) {
+        // 由 onFinish 统一收口
+      } else if (data.error) {
+        errored = true;
+        callbacks.onError?.(data.error);
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buf = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        // 拆 SSE 事件
-        const events = buf.split('\n\n');
-        buf = events.pop() || '';
-        for (const evt of events) {
-          const line = evt.split('\n').find((l) => l.startsWith('data: '));
-          if (!line) continue;
-          const json = line.slice(6).trim();
-          if (!json) continue;
-          try {
-            const data = JSON.parse(json);
-            if (data.conversationId) {
-              callbacks.onConversationId?.(data.conversationId);
-            } else if (data.thinking) {
-              // 后端 keepalive 心跳：模型还在思考中
-              callbacks.onThinking?.();
-            } else if (data.delta !== undefined) {
-              callbacks.onDelta?.(data.delta);
-            } else if (data.done) {
-              callbacks.onDone?.();
-            } else if (data.error) {
-              callbacks.onError?.(data.error);
-            }
-          } catch (_) {}
-        }
-      }
-      callbacks.onDone?.();
-    })
-    .catch((err) => {
-      if (err.name !== 'AbortError') {
-        callbacks.onError?.(err.message || String(err));
-      }
-    });
-
-  return controller;
+    },
+  });
 }

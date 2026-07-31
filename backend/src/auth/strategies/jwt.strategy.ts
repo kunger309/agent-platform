@@ -12,6 +12,8 @@ export interface JwtPayload {
   avatar?: string;
   isSuperAdmin: boolean;
   roles: string[];
+  /** 角色 id 列表：字段级权限解析用（旧 token 可能没有，需容错） */
+  roleIds?: string[];
   permissionCodes: string[];
   organizations: Array<{ id: string; name: string; dataScope: string; isPrimary: boolean }>;
   currentOrgId?: string;
@@ -49,6 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       avatar: payload.avatar,
       isSuperAdmin: payload.isSuperAdmin,
       roles: payload.roles,
+      roleIds: payload.roleIds || [],
       permissionCodes: payload.permissionCodes,
       organizations: payload.organizations,
       currentOrgId: payload.currentOrgId,
