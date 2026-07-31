@@ -289,10 +289,10 @@ onMounted(() => {
 <style scoped>
 .kb-list { padding: 0; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.kb-link { color: #409eff; cursor: pointer; font-weight: 500; }
+.kb-link { color: var(--el-color-primary); cursor: pointer; font-weight: 500; }
 .kb-link:hover { text-decoration: underline; }
-.muted { color: #909399; }
+.muted { color: var(--el-text-color-secondary); }
 .emb-cell { display: flex; flex-direction: column; gap: 2px; }
-.emb-cell .provider { font-size: 12px; }
-.form-tip { font-size: 12px; color: #909399; margin-top: 4px; }
+.emb-cell .provider { font-size: 12px; color: var(--el-text-color-secondary); }
+.form-tip { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; }
 </style>

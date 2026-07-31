@@ -28,11 +28,78 @@ const routes = [
     meta: { requiresAuth: true, title: '工作台', icon: 'House' },
   },
 
-  // 管理后台
+  // 聊天
+  {
+    path: '/chat',
+    component: () => import('@/views/chat/Chat.vue'),
+    meta: { requiresAuth: true, permission: 'agent:run', title: '智能对话', icon: 'ChatDotRound' },
+  },
+
+  // 智能体
+  {
+    path: '/agents',
+    component: () => import('@/views/agents/AgentList.vue'),
+    meta: { requiresAuth: true, permission: 'agent:list', title: '智能体', icon: 'MagicStick' },
+  },
+  {
+    path: '/agents/:id/debug',
+    component: () => import('@/views/agents/AgentDebug.vue'),
+    meta: { requiresAuth: true, permission: 'agent:run', title: '调试对话', hideInMenu: true },
+  },
+
+  // 知识库（RAG）
+  {
+    path: '/knowledge-bases',
+    component: () => import('@/views/knowledge-bases/KBList.vue'),
+    meta: { requiresAuth: true, permission: 'kb:list', title: '知识库', icon: 'Collection' },
+  },
+  {
+    path: '/knowledge-bases/:id',
+    component: () => import('@/views/knowledge-bases/KBDetail.vue'),
+    meta: { requiresAuth: true, permission: 'kb:list', title: '知识库详情', hideInMenu: true },
+  },
+
+  // 技能市场（Skills 工具市场）
+  {
+    path: '/skills',
+    component: () => import('@/layouts/RouterView.vue'), // 父级聚合 children
+    meta: { requiresAuth: true, permission: 'skill:list', title: '技能市场', icon: 'Cpu' },
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/skills/SkillList.vue'),
+        meta: { requiresAuth: true, permission: 'skill:list', title: '技能列表' },
+      },
+      {
+        path: 'invocations',
+        component: () => import('@/views/tools/ToolInvocationList.vue'),
+        meta: { requiresAuth: true, permission: 'execution:list', title: '调用记录' },
+      },
+    ],
+  },
+
+  // 工作流（LangGraph 可视化编排）
+  {
+    path: '/workflows',
+    component: () => import('@/views/workflow/WorkflowList.vue'),
+    meta: { requiresAuth: true, permission: 'workflow:list', title: '工作流', icon: 'Share' },
+  },
+  {
+    path: '/workflows/:id/edit',
+    component: () => import('@/views/workflow/WorkflowEditor.vue'),
+    meta: { requiresAuth: true, permission: 'workflow:edit', title: '编排工作流', hideInMenu: true },
+  },
+  {
+    path: '/workflows/:id/debug',
+    component: () => import('@/views/workflow/WorkflowDebug.vue'),
+    meta: { requiresAuth: true, permission: 'workflow:run', title: '调试工作流', hideInMenu: true },
+  },
+
+  // 系统设置（原「系统管理」+「模型配置」合并子项，置菜单末尾）
   {
     path: '/admin',
     component: () => import('@/layouts/RouterView.vue'),
-    meta: { requiresAuth: true, title: '系统管理', icon: 'Setting' },
+    meta: { requiresAuth: true, title: '系统设置', icon: 'Setting' },
     children: [
       {
         path: 'users',
@@ -59,81 +126,12 @@ const routes = [
         component: () => import('@/views/admin/monitor/MonitorDashboard.vue'),
         meta: { requiresAuth: true, permission: 'monitor:view', title: '系统监控', icon: 'Odometer' },
       },
-    ],
-  },
-
-  // 聊天
-  {
-    path: '/chat',
-    component: () => import('@/views/chat/Chat.vue'),
-    meta: { requiresAuth: true, permission: 'agent:run', title: '智能对话', icon: 'ChatDotRound' },
-  },
-
-  // 智能体
-  {
-    path: '/agents',
-    component: () => import('@/views/agents/AgentList.vue'),
-    meta: { requiresAuth: true, permission: 'agent:list', title: '智能体', icon: 'MagicStick' },
-  },
-  {
-    path: '/agents/:id/debug',
-    component: () => import('@/views/agents/AgentDebug.vue'),
-    meta: { requiresAuth: true, permission: 'agent:run', title: '调试对话', hideInMenu: true },
-  },
-
-  // 模型配置
-  {
-    path: '/providers',
-    component: () => import('@/views/providers/ProviderList.vue'),
-    meta: { requiresAuth: true, permission: 'provider:list', title: '模型配置', icon: 'Connection' },
-  },
-
-  // 知识库（RAG）
-  {
-    path: '/knowledge-bases',
-    component: () => import('@/views/knowledge-bases/KBList.vue'),
-    meta: { requiresAuth: true, permission: 'kb:list', title: '知识库', icon: 'Collection' },
-  },
-
-  // 技能市场（Skills 工具市场）
-  {
-    path: '/skills',
-    component: () => import('@/layouts/RouterView.vue'), // 父级聚合 children
-    meta: { requiresAuth: true, permission: 'skill:list', title: '技能市场', icon: 'Cpu' },
-    children: [
       {
-        path: '',
-        component: () => import('@/views/skills/SkillList.vue'),
-        meta: { requiresAuth: true, permission: 'skill:list', title: '技能列表' },
-      },
-      {
-        path: 'invocations',
-        component: () => import('@/views/tools/ToolInvocationList.vue'),
-        meta: { requiresAuth: true, permission: 'execution:list', title: '调用记录' },
+        path: 'providers',
+        component: () => import('@/views/providers/ProviderList.vue'),
+        meta: { requiresAuth: true, permission: 'provider:list', title: '模型配置', icon: 'Connection' },
       },
     ],
-  },
-  {
-    path: '/knowledge-bases/:id',
-    component: () => import('@/views/knowledge-bases/KBDetail.vue'),
-    meta: { requiresAuth: true, permission: 'kb:list', title: '知识库详情', hideInMenu: true },
-  },
-
-  // 工作流（LangGraph 可视化编排）
-  {
-    path: '/workflows',
-    component: () => import('@/views/workflow/WorkflowList.vue'),
-    meta: { requiresAuth: true, permission: 'workflow:list', title: '工作流', icon: 'Share' },
-  },
-  {
-    path: '/workflows/:id/edit',
-    component: () => import('@/views/workflow/WorkflowEditor.vue'),
-    meta: { requiresAuth: true, permission: 'workflow:edit', title: '编排工作流', hideInMenu: true },
-  },
-  {
-    path: '/workflows/:id/debug',
-    component: () => import('@/views/workflow/WorkflowDebug.vue'),
-    meta: { requiresAuth: true, permission: 'workflow:run', title: '调试工作流', hideInMenu: true },
   },
 
   // 个人中心
@@ -141,6 +139,12 @@ const routes = [
     path: '/profile',
     component: () => import('@/views/profile/Profile.vue'),
     meta: { requiresAuth: true, title: '个人中心', hideInMenu: true },
+  },
+
+  // 旧路径兼容：/providers 已合并为 /admin/providers 子项
+  {
+    path: '/providers',
+    redirect: '/admin/providers',
   },
 
   // 403 / 404

@@ -125,28 +125,35 @@ onMounted(async () => {
 
 <style scoped>
 .dashboard { padding: 0; }
-.welcome-hint { color: #909399; font-size: 14px; }
+.welcome-hint { color: var(--text-secondary); font-size: 14px; }
 .metric-card {
   display: flex;
   align-items: center;
   padding: 4px;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
 .metric-card:hover {
   transform: translateY(-2px);
+  box-shadow: var(--shadow-float);
 }
 .metric-icon {
-  width: 48px; height: 48px; border-radius: 8px;
+  width: 48px; height: 48px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; margin-right: 14px; flex-shrink: 0;
+  color: var(--text-inverse); margin-right: 14px; flex-shrink: 0;
 }
 .metric-info { flex: 1; }
-.metric-title { color: #909399; font-size: 13px; }
-.metric-value { font-size: 22px; font-weight: 600; min-height: 28px; }
+.metric-title { color: var(--text-secondary); font-size: 13px; }
+.metric-value {
+  font-size: 22px;
+  font-weight: 600;
+  min-height: 28px;
+  color: var(--text-primary);
+}
 .feature-list {
   margin: 0;
   padding-left: 18px;
   line-height: 1.9;
+  color: var(--text-regular);
 }
 </style>

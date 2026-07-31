@@ -282,7 +282,7 @@
             :value="w.id"
           >
             <span style="float:left">{{ w.name }}</span>
-            <span style="float:right;color:#999;font-size:12px">v{{ w.version }}</span>
+            <span style="float:right;color:var(--el-text-color-secondary);font-size:12px">v{{ w.version }}</span>
           </el-option>
         </el-select>
         <p class="wf-picker-hint">仅显示「已发布」工作流。每个会话独立绑定一个工作流，新建对话会重置绑定。</p>
@@ -302,7 +302,7 @@
             :value="a.id"
           >
             <span style="float:left">{{ a.name }}</span>
-            <span style="float:right;color:#999;font-size:12px">{{ a.description || '' }}</span>
+            <span style="float:right;color:var(--el-text-color-secondary);font-size:12px">{{ a.description || '' }}</span>
           </el-option>
         </el-select>
         <p class="wf-picker-hint">仅显示「已发布」智能体。智能体自带角色设定（系统提示词 + 模型配置），支持多轮上下文；暂不支持附件上传。</p>
@@ -976,9 +976,10 @@ function removeKb(id) {
 .chat-shell {
   display: flex;
   height: 100%;
-  background: #fff;
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 .chat-toolbar {
@@ -986,8 +987,8 @@ function removeKb(id) {
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  border-bottom: 1px solid #f0f0f0;
-  background: #fafbfc;
+  border-bottom: 1px solid var(--border-base);
+  background: var(--surface-muted);
 }
 .mode-pill {
   display: inline-flex;
@@ -995,24 +996,23 @@ function removeKb(id) {
   gap: 6px;
   padding: 4px 12px;
   border-radius: 999px;
-  background: #ecf5ff;
-  color: #409eff;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
   font-size: 13px;
   font-weight: 500;
 }
 .mode-pill.mode-pill-wf {
-  background: #f0f9eb;
-  color: #67c23a;
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
+  color: var(--el-color-success);
 }
 .mode-pill.mode-pill-agent {
-  background: #f5f0ff;
-  color: #722ed1;
+  background: color-mix(in srgb, var(--el-color-primary) 12%, var(--surface));
+  color: var(--purple);
 }
 .mode-pill.mode-pill-kb {
-  background: #fdf6ec;
-  color: #e6a23c;
+  background: color-mix(in srgb, var(--el-color-warning) 14%, transparent);
+  color: var(--el-color-warning);
 }
-/* 会话列表四色模式点：与顶栏 pill 颜色保持一致（蓝=纯 LLM，橙=知识库，紫=智能体，绿=工作流） */
 .mode-dot {
   width: 7px;
   height: 7px;
@@ -1020,10 +1020,10 @@ function removeKb(id) {
   flex-shrink: 0;
   display: inline-block;
 }
-.dot-llm { background: #409eff; }   /* 蓝=纯 LLM（与 .mode-pill 默认色 #409eff 对齐） */
-.dot-kb { background: #e6a23c; }    /* 橙=知识库 */
-.dot-agent { background: #722ed1; } /* 紫=智能体 */
-.dot-wf { background: #67c23a; }    /* 绿=工作流（与 .mode-pill.mode-pill-wf 色 #67c23a 对齐） */
+.dot-llm { background: var(--el-color-primary); }
+.dot-kb { background: var(--el-color-warning); }
+.dot-agent { background: var(--purple); }
+.dot-wf { background: var(--el-color-success); }
 .wf-picker-mode {
   display: flex;
   margin-bottom: 16px;
@@ -1038,20 +1038,20 @@ function removeKb(id) {
 .wf-picker-hint {
   margin-top: 12px;
   font-size: 12px;
-  color: #999;
+  color: var(--el-text-color-secondary);
   line-height: 1.6;
 }
 .chat-side {
   width: 240px;
-  border-right: 1px solid #ebeef5;
+  border-right: 1px solid var(--border-base);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  background: #fafbfc;
+  background: var(--surface-muted);
 }
 .side-header {
   padding: 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-base);
 }
 .session-list {
   flex: 1;
@@ -1061,7 +1061,7 @@ function removeKb(id) {
 .empty-side {
   text-align: center;
   padding: 30px 0;
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
   font-size: 13px;
 }
 .empty-side p { margin: 6px 0 0; }
@@ -1073,10 +1073,14 @@ function removeKb(id) {
   border-radius: 6px;
   cursor: pointer;
   margin-bottom: 4px;
-  transition: background 0.15s;
+  color: var(--el-text-color-regular);
+  transition: background 0.15s, color 0.15s;
 }
-.session-item:hover { background: #eef2f7; }
-.session-item.active { background: #e6f0ff; color: #1890ff; }
+.session-item:hover { background: var(--surface-hover); }
+.session-item.active {
+  background: var(--el-color-primary-light-9);
+  color: var(--brand-primary);
+}
 .session-icon { flex-shrink: 0; }
 .session-title {
   flex: 1;
@@ -1085,20 +1089,21 @@ function removeKb(id) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.session-del { flex-shrink: 0; color: #c0c4cc; }
-.session-del:hover { color: #f56c6c; }
+.session-del { flex-shrink: 0; color: var(--el-text-color-placeholder); }
+.session-del:hover { color: var(--el-color-danger); }
 
 .chat-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: var(--surface);
 }
 .messages {
   flex: 1;
   padding: 20px 24px;
   overflow-y: auto;
-  background: #fafbfc;
+  background: var(--surface-muted);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1106,10 +1111,10 @@ function removeKb(id) {
 .empty {
   text-align: center;
   padding: 80px 0;
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
 }
-.empty-title { font-size: 16px; margin: 16px 0 4px; color: #606266; }
-.empty-hint { font-size: 12px; color: #909399; margin: 0; }
+.empty-title { font-size: 16px; margin: 16px 0 4px; color: var(--el-text-color-regular); }
+.empty-hint { font-size: 12px; color: var(--el-text-color-secondary); margin: 0; }
 
 .msg { display: flex; gap: 12px; align-items: flex-start; }
 .msg-user { flex-direction: row-reverse; }
@@ -1126,14 +1131,14 @@ function removeKb(id) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .user-bubble {
-  background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%);
-  color: #fff;
+  background: var(--brand-gradient);
+  color: var(--text-inverse);
   border-top-right-radius: 2px;
 }
 .ai-bubble {
-  background: #fff;
-  color: #303133;
-  border: 1px solid #ebeef5;
+  background: var(--surface);
+  color: var(--el-text-color-primary);
+  border: 1px solid var(--border-base);
   border-top-left-radius: 2px;
   width: 100%;
 }
@@ -1152,7 +1157,7 @@ function removeKb(id) {
   border-radius: 6px;
   border: 1px solid rgba(255,255,255,.4);
 }
-.ai-bubble .attach-item .attach-thumb { border-color: #ebeef5; }
+.ai-bubble .attach-item .attach-thumb { border-color: var(--border-base); }
 .attach-file {
   display: inline-flex;
   align-items: center;
@@ -1163,7 +1168,10 @@ function removeKb(id) {
   border-radius: 6px;
   max-width: 200px;
 }
-.ai-bubble .attach-file { background: #f5f7fa; color: #606266; }
+.ai-bubble .attach-file {
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+}
 
 /* 断线重连提示条 */
 .reconnect-hint {
@@ -1179,14 +1187,14 @@ function removeKb(id) {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 13px;
 }
 .thinking-loader .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #67c23a;
+  background: var(--el-color-success);
   display: inline-block;
   animation: bounce 1.4s infinite ease-in-out both;
 }
@@ -1210,12 +1218,12 @@ function removeKb(id) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #f5f7fa;
-  border: 1px solid #ebeef5;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   padding: 5px 8px;
   font-size: 12px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   max-width: 200px;
 }
 .chip-thumb {
@@ -1229,13 +1237,13 @@ function removeKb(id) {
   white-space: nowrap;
   max-width: 120px;
 }
-.chip-del { cursor: pointer; color: #c0c4cc; }
-.chip-del:hover { color: #f56c6c; }
+.chip-del { cursor: pointer; color: var(--el-text-color-placeholder); }
+.chip-del:hover { color: var(--el-color-danger); }
 
 .input-area {
   padding: 12px 24px;
-  border-top: 1px solid #ebeef5;
-  background: #fff;
+  border-top: 1px solid var(--border-base);
+  background: var(--surface);
 }
 .input-inner {
   max-width: 900px;
@@ -1263,9 +1271,9 @@ function removeKb(id) {
 /* ===== 助手消息：检索来源面板 ===== */
 .sources-panel {
   margin-top: 10px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 6px;
-  background: #fafbfc;
+  background: var(--el-fill-color-blank);
   font-size: 12px;
   overflow: hidden;
 }
@@ -1275,21 +1283,21 @@ function removeKb(id) {
   gap: 6px;
   padding: 6px 10px;
   cursor: pointer;
-  color: #606266;
+  color: var(--el-text-color-regular);
   user-select: none;
 }
-.sources-header:hover { background: #f0f3f7; }
+.sources-header:hover { background: var(--surface-hover); }
 .sources-caret { margin-left: auto; transition: transform 0.2s; }
 .sources-caret.open { transform: rotate(180deg); }
 .sources-body {
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--el-border-color-lighter);
   max-height: 260px;
   overflow-y: auto;
   padding: 4px 0;
 }
 .source-item {
   padding: 6px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-extra-light);
 }
 .source-item:last-child { border-bottom: none; }
 .source-meta {
@@ -1299,15 +1307,15 @@ function removeKb(id) {
   margin-bottom: 4px;
   flex-wrap: wrap;
 }
-.source-doc { color: #303133; font-weight: 500; }
+.source-doc { color: var(--el-text-color-primary); font-weight: 500; }
 .source-score {
   margin-left: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 11px;
 }
 .source-content {
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

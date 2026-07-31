@@ -1,37 +1,26 @@
 /* ============================================
  * 全局基础样式 + 响应式断点（1080p / 2K / 4K）
+ * 颜色、圆角、阴影见 styles/tokens.css
  * ============================================ */
 
 :root {
-  /* 排版 */
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  color-scheme: light;
 
-  /* 主题色（Element Plus 兼容） */
-  --el-color-primary: #409eff;
-  --brand-bg: #001529;
-  --brand-bg-2: #002140;
-  --content-bg: #f0f2f5;
-  --border-soft: #e8e8e8;
-
-  /* 布局变量（1080p 基线） */
   --sidebar-width: 220px;
   --topbar-height: 60px;
-  --content-max-width: 1400px;   /* 1920x1080 下左右各留 260px 边距 */
-  --chat-max-width: 760px;        /* 聊天消息气泡 */
-  --form-max-width: 720px;        /* 弹窗表单 */
+  --content-max-width: 1400px;
+  --chat-max-width: 760px;
+  --form-max-width: 720px;
   --content-padding: 16px;
-  --radius-md: 8px;
 }
 
-/* 2K（2560x1440） */
 @media (min-width: 2560px) {
   :root {
     --content-max-width: 1600px;
@@ -41,7 +30,6 @@
   }
 }
 
-/* 4K（3840x2160） */
 @media (min-width: 3840px) {
   :root {
     --content-max-width: 2000px;
@@ -54,69 +42,155 @@
 
 * { box-sizing: border-box; }
 
-html, body, #app {
+html,
+body,
+#app {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   min-width: 1024px;
-  background: var(--content-bg);
-  color: #303133;
+  background: var(--app-bg);
+  color: var(--text-regular);
+}
+
+html,
+body {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* 主题切换瞬间（约 300ms）禁用全局 transition，避免 el-table / menu /
+   tag / button 等组件在 CSS variable 变化时出现"灰色"过渡帧。
+   由 stores/theme.js 的 applyTheme() 临时加到 body 上，300ms 后自动移除。 */
+body.theme-switching *,
+body.theme-switching *::before,
+body.theme-switching *::after {
+  transition: none !important;
 }
 
 #app {
-  /* 覆盖 Vite 默认模板的 max-width 限制 */
   max-width: none;
   text-align: left;
 }
 
-a { color: var(--el-color-primary); text-decoration: none; }
-a:hover { opacity: 0.85; }
+a {
+  color: var(--brand-primary);
+  text-decoration: none;
+}
 
+a:hover { color: var(--brand-primary-hover); }
 button { font-family: inherit; }
+::selection { color: #fff; background: color-mix(in srgb, var(--brand-primary) 78%, transparent); }
+
+/* ============================================
+ * Element Plus 全局外观收敛
+ * ============================================ */
+
+.el-card {
+  --el-card-bg-color: var(--surface);
+  --el-card-border-color: var(--border-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.el-card.is-hover-shadow:hover {
+  box-shadow: var(--shadow-float);
+}
+
+.el-button,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-tag,
+.el-alert {
+  border-radius: var(--radius-sm);
+}
+
+.el-dialog,
+.el-message-box,
+.el-drawer {
+  background: var(--surface-elevated);
+  color: var(--text-regular);
+}
+
+.el-dialog,
+.el-message-box {
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+}
+
+.el-table {
+  --el-table-bg-color: var(--surface);
+  --el-table-tr-bg-color: var(--surface);
+  --el-table-header-bg-color: var(--surface-muted);
+  --el-table-row-hover-bg-color: var(--surface-hover);
+  --el-table-border-color: var(--border-light);
+  --el-table-text-color: var(--text-regular);
+  --el-table-header-text-color: var(--text-secondary);
+}
+/* EP 默认 .el-table__cell 有 `transition: background-color .25s ease`，
+   主题切换瞬间会让 stripe 行背景从深色 #1d1d1d 渐变到浅色 #f8fafc，
+   中间帧出现明显深灰。去掉过渡让 cell 在主题切换时立即跳变。 */
+.el-table .el-table__cell {
+  transition: none !important;
+}
+
+/* 全局 loading 遮罩背景与主题表面同色（浅色=白、深色=深色表面）。
+   消除 EP 默认半透明白罩叠加 zebra 浅灰斑马纹产生的"灰色 loading 表"观感——
+   此前进页面/加载数据时，表格会先呈现灰蒙蒙的遮罩再淡出变白。 */
+.el-loading-mask {
+  background-color: var(--surface);
+}
+
+.el-dropdown__popper,
+.el-select__popper,
+.el-picker__popper,
+.el-popover.el-popper {
+  --el-bg-color-overlay: var(--surface-elevated);
+}
 
 /* ============================================
  * 通用工具类
  * ============================================ */
 
-/* 内容居中容器：所有列表/详情页用它包一层 */
 .page-container {
   width: 100%;
   max-width: var(--content-max-width);
   margin: 0 auto;
 }
 
-/* 卡片容器 */
 .card-block {
-  background: #fff;
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
   padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
-/* 页面标题 */
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
 }
+
 .page-header h2 {
   margin: 0;
+  color: var(--text-primary);
   font-size: 20px;
-  font-weight: 600;
-  color: #303133;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
-/* 表格容器 */
 .table-card {
-  background: #fff;
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
   padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
-/* 分页/搜索栏 */
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -125,11 +199,15 @@ button { font-family: inherit; }
   gap: 8px;
   flex-wrap: wrap;
 }
-.toolbar .toolbar-left { display: flex; gap: 8px; align-items: center; }
-.toolbar .toolbar-right { display: flex; gap: 8px; align-items: center; }
 
-/* 滚动条美化（Webkit） */
+.toolbar .toolbar-left,
+.toolbar .toolbar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #909399; }
+::-webkit-scrollbar-thumb { background: var(--text-placeholder); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 ::-webkit-scrollbar-track { background: transparent; }

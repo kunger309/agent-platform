@@ -111,29 +111,31 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--brand-gradient);
 }
 .login-box {
-  background: #fff;
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
   padding: 40px;
   width: 420px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-float);
+  color: var(--text-regular);
 }
 .login-title {
   font-size: 26px;
   text-align: center;
   margin: 0 0 4px;
-  color: #303133;
+  color: var(--text-primary);
 }
 .login-subtitle {
   text-align: center;
-  color: #909399;
+  color: var(--text-secondary);
   margin: 0 0 28px;
   font-size: 13px;
 }
 .tip-label {
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: normal;
 }
@@ -145,12 +147,12 @@ async function handleLogin() {
   flex-wrap: wrap;
 }
 .default-tip .muted {
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 .copyright {
   text-align: center;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
   font-size: 12px;
   margin: 24px 0 0;
 }

@@ -61,8 +61,8 @@ const summary = computed(() =>
 .wf-node {
   min-width: 180px;
   max-width: 240px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border-base);
   border-left: 4px solid var(--node-color);
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -77,14 +77,14 @@ const summary = computed(() =>
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: #f9fafb;
-  border-bottom: 1px solid #f0f0f0;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--el-border-color-extra-light);
 }
 .wf-node__icon { font-size: 16px; }
-.wf-node__title { font-weight: 600; color: #1f2937; }
+.wf-node__title { font-weight: 600; color: var(--text-primary); }
 .wf-node__name {
   margin-left: auto;
-  color: #6b7280;
+  color: var(--el-text-color-secondary);
   font-size: 11px;
   max-width: 90px;
   overflow: hidden;
@@ -93,7 +93,7 @@ const summary = computed(() =>
 }
 .wf-node__body {
   padding: 8px 10px;
-  color: #4b5563;
+  color: var(--el-text-color-regular);
   line-height: 1.4;
   min-height: 20px;
   word-break: break-all;
@@ -104,10 +104,10 @@ const summary = computed(() =>
   position: absolute;
   right: -26px;
   font-size: 10px;
-  color: #fff;
+  color: var(--text-inverse);
   padding: 0 4px;
   border-radius: 3px;
 }
-.wf-edge-label--true { top: 30%; background: #059669; }
-.wf-edge-label--false { top: 70%; background: #dc2626; }
+.wf-edge-label--true { top: 30%; background: var(--el-color-success); }
+.wf-edge-label--false { top: 70%; background: var(--el-color-danger); }
 </style>

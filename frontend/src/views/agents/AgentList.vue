@@ -445,7 +445,7 @@ onMounted(load);
 .agent-list { padding: 0; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-title { margin: 0; font-weight: 600; }
-.form-tip { font-size: 11px; color: #9ca3af; line-height: 1.4; margin-top: 4px; }
+.form-tip { font-size: 11px; color: var(--el-text-color-secondary); line-height: 1.4; margin-top: 4px; }
 .prompt-helper { margin-top: 4px; display: flex; align-items: center; gap: 8px; }
-.prompt-helper .hint { font-size: 12px; color: #909399; }
+.prompt-helper .hint { font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

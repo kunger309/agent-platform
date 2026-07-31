@@ -511,12 +511,17 @@ onMounted(load);
 }
 .test-result {
   width: 100%;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--el-border-color);
   border-radius: 6px;
   overflow: hidden;
 }
-.test-result.success { border-color: #67c23a; }
-.test-result.failed { border-color: #f56c6c; }
-.test-meta { padding: 6px 10px; background: #f5f7fa; font-size: 12px; color: #606266; }
+.test-result.success { border-color: var(--el-color-success); }
+.test-result.failed { border-color: var(--el-color-danger); }
+.test-meta {
+  padding: 6px 10px;
+  background: var(--el-fill-color-light);
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
 .test-output { margin: 0; padding: 10px; max-height: 240px; overflow: auto; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
 </style>

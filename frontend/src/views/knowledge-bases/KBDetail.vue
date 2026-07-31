@@ -436,18 +436,18 @@ onBeforeUnmount(stopPolling);
 .title-row h2 { margin: 0; }
 .sub { font-size: 13px; margin-top: 4px; }
 .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.muted { color: #909399; font-size: 12px; }
+.muted { color: var(--el-text-color-secondary); font-size: 12px; }
 .block { margin-bottom: 16px; }
 .card-head { display: flex; justify-content: space-between; align-items: center; }
 .retrieve-opts { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
 .retrieve-result { margin-top: 8px; }
 .result-meta { margin-bottom: 8px; }
 .result-item {
-  border: 1px solid #ebeef5; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;
-  background: #fafafa;
+  border: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;
+  background: var(--el-fill-color-blank);
 }
 .result-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
-.rank { font-weight: 600; color: #409eff; }
+.rank { font-weight: 600; color: var(--el-color-primary); }
 .score { margin-left: 4px; }
 .src { margin-left: auto; }
 .content {
@@ -457,8 +457,8 @@ onBeforeUnmount(stopPolling);
 .chunks-wrap { padding: 0 4px; }
 .chunks-meta { margin-bottom: 12px; }
 .chunk-card {
-  border: 1px solid #ebeef5; border-radius: 6px; padding: 8px 10px;
-  margin-bottom: 10px; background: #fafbfc;
+  border: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 8px 10px;
+  margin-bottom: 10px; background: var(--el-fill-color-lighter);
 }
 .chunk-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .chunk-bar .tokens { margin-left: auto; }

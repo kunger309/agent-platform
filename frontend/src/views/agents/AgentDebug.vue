@@ -11,7 +11,7 @@
     <div class="chat-container">
       <div class="messages" ref="messagesRef">
         <div v-if="messages.length === 0" class="empty">
-          <el-icon size="56" color="#dcdfe6"><ChatDotRound /></el-icon>
+          <el-icon size="56" :color="themeStore.isDark ? '#3b4d66' : '#dcdfe6'"><ChatDotRound /></el-icon>
           <p class="empty-title">开始与 <b>{{ agentName }}</b> 对话吧</p>
           <p class="empty-hint">输入 Enter 发送，Shift+Enter 换行，Ctrl+Enter 也可发送</p>
         </div>
@@ -22,7 +22,7 @@
           :class="['msg', `msg-${m.role}`]"
         >
           <div class="msg-avatar">
-            <el-avatar :size="36" :style="{ background: m.role === 'user' ? '#409eff' : '#67c23a' }">
+            <el-avatar :size="36" :style="{ background: m.role === 'user' ? 'var(--brand-primary)' : 'var(--success)' }">
               {{ m.role === 'user' ? '我' : 'AI' }}
             </el-avatar>
           </div>
@@ -88,11 +88,13 @@ import {
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { useChatStream } from '@/composables/useChatStream';
+import { useThemeStore } from '@/stores/theme';
 import ThinkingBlock from '@/components/chat/ThinkingBlock.vue';
 import MarkdownView from '@/components/chat/MarkdownView.vue';
 
 const route = useRoute();
 const router = useRouter();
+const themeStore = useThemeStore();
 const agentId = route.params.id;
 const agentName = route.query.name || '智能体';
 
@@ -195,9 +197,10 @@ onMounted(() => {});
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   min-height: 0;
 }
@@ -206,7 +209,7 @@ onMounted(() => {});
   flex: 1;
   padding: 20px 24px;
   overflow-y: auto;
-  background: #fafbfc;
+  background: var(--surface-muted);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -215,10 +218,18 @@ onMounted(() => {});
 .empty {
   text-align: center;
   padding: 80px 0;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
-.empty-title { font-size: 16px; margin: 16px 0 4px; color: #606266; }
-.empty-hint { font-size: 12px; color: #909399; margin: 0; }
+.empty-title {
+  font-size: 16px;
+  margin: 16px 0 4px;
+  color: var(--text-regular);
+}
+.empty-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+}
 
 .msg { display: flex; gap: 12px; align-items: flex-start; }
 .msg-user { flex-direction: row-reverse; }
@@ -233,11 +244,11 @@ onMounted(() => {});
   align-items: baseline;
   margin-bottom: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 .msg-user .msg-meta { justify-content: flex-end; }
-.msg-role { font-weight: 600; color: #606266; }
-.msg-time { color: #c0c4cc; }
+.msg-role { font-weight: 600; color: var(--text-regular); }
+.msg-time { color: var(--text-placeholder); }
 
 .msg-bubble {
   position: relative;
@@ -249,14 +260,14 @@ onMounted(() => {});
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .msg-user .msg-bubble {
-  background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%);
-  color: #fff;
+  background: var(--brand-gradient);
+  color: var(--text-inverse);
   border-top-right-radius: 2px;
 }
 .msg-assistant .msg-bubble {
-  background: #fff;
-  color: #303133;
-  border: 1px solid #ebeef5;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
   border-top-left-radius: 2px;
 }
 .msg-text { margin: 0; }
@@ -264,13 +275,13 @@ onMounted(() => {});
 
 /* 思考过程折叠块 */
 .think-block {
-  background: #f5f7fa;
-  border: 1px dashed #dcdfe6;
+  background: var(--surface-soft);
+  border: 1px dashed var(--border-base);
   border-radius: 6px;
   padding: 6px 10px;
   margin-bottom: 8px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 .msg-user .think-block { display: none; }
 .think-block summary {
@@ -282,16 +293,17 @@ onMounted(() => {});
   outline: none;
 }
 .think-block summary::-webkit-details-marker { display: none; }
-.think-len { color: #c0c4cc; font-size: 11px; }
+.think-len { color: var(--text-placeholder); font-size: 11px; }
 .think-content {
   margin: 8px 0 0;
   padding: 8px;
-  background: #fff;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   border-radius: 4px;
   font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 12px;
   line-height: 1.6;
-  color: #606266;
+  color: var(--text-regular);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 280px;
@@ -301,7 +313,7 @@ onMounted(() => {});
 /* 打字光标 */
 .cursor-blink {
   display: inline-block;
-  color: #409eff;
+  color: var(--brand-primary);
   animation: blink 1s steps(2) infinite;
   margin-left: 2px;
 }
@@ -310,8 +322,8 @@ onMounted(() => {});
 /* 输入区 */
 .input-area {
   padding: 12px 24px;
-  border-top: 1px solid #ebeef5;
-  background: #fff;
+  border-top: 1px solid var(--border-light);
+  background: var(--surface);
 }
 .input-inner {
   max-width: var(--chat-max-width);
@@ -331,7 +343,7 @@ onMounted(() => {});
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #67c23a;
+  color: var(--success);
   margin-right: auto;
 }
 .rotating { animation: rot 1.2s linear infinite; }

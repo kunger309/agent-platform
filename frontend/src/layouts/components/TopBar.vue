@@ -3,11 +3,14 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { useUserStore } from '@/stores/user';
+import { useThemeStore } from '@/stores/theme';
 
 const router = useRouter();
 const userStore = useUserStore();
+const themeStore = useThemeStore();
 
 const user = computed(() => userStore.user || {});
+const themeActionLabel = computed(() => themeStore.isDark ? '切换到浅色主题' : '切换到深色主题');
 
 const roleLabel = computed(() => {
   const roles = user.value.roles || [];
@@ -38,6 +41,21 @@ const goProfile = () => router.push('/profile');
       <span class="page-title">{{ $route.meta?.title || '' }}</span>
     </div>
     <div class="topbar-right">
+      <el-tooltip :content="themeActionLabel" placement="bottom">
+        <el-button
+          class="theme-toggle"
+          circle
+          text
+          :aria-label="themeActionLabel"
+          @click="themeStore.toggleTheme"
+        >
+          <el-icon :size="19">
+            <Sunny v-if="themeStore.isDark" />
+            <Moon v-else />
+          </el-icon>
+        </el-button>
+      </el-tooltip>
+
       <el-dropdown trigger="click">
         <span class="user-info">
           <el-avatar :size="36" :src="user.avatar">
@@ -71,13 +89,30 @@ const goProfile = () => router.push('/profile');
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: #fff;
+  background: var(--surface);
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .page-title {
   font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-  letter-spacing: 0.3px;
+  font-weight: 650;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
+}
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s;
+}
+.theme-toggle:hover {
+  color: var(--brand-primary);
+  background: var(--surface-hover);
+  border-color: var(--border-base);
 }
 .user-info {
   display: flex;
@@ -88,19 +123,19 @@ const goProfile = () => router.push('/profile');
   border-radius: 8px;
   transition: background 0.2s;
 }
-.user-info:hover { background: #f5f7fa; }
+.user-info:hover { background: var(--surface-hover); }
 .user-text { display: flex; flex-direction: column; line-height: 1.25; }
 .user-name {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 .user-role {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 .caret {
-  color: #c0c4cc;
+  color: var(--text-placeholder);
   font-size: 12px;
   transition: transform 0.2s;
 }

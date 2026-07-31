@@ -3,9 +3,16 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import routes from '@/router/routes';
 import { usePermissionStore } from '@/stores/permission';
+import { useThemeStore } from '@/stores/theme';
 
 const route = useRoute();
 const permissionStore = usePermissionStore();
+const themeStore = useThemeStore();
+
+const sidebarText = computed(() => themeStore.isDark ? '#cbd5e1' : 'var(--sidebar-text)');
+const sidebarActiveText = computed(() => themeStore.isDark ? '#ffffff' : 'var(--sidebar-text-active)');
+const logoTitleColor = computed(() => themeStore.isDark ? '#ffffff' : 'var(--text-primary)');
+const logoSubColor = computed(() => themeStore.isDark ? 'rgba(255,255,255,0.55)' : 'var(--text-secondary)');
 
 const menuItems = computed(() => {
   const traverse = (items) => {
@@ -38,16 +45,16 @@ const activeMenu = computed(() => route.path);
         <img src="/logo.svg" alt="logo" class="logo-img" />
       </div>
       <div class="logo-text">
-        <div class="logo-title">AI Agent</div>
-        <div class="logo-sub">智能体平台</div>
+        <div class="logo-title" :style="{ color: logoTitleColor }">AI Agent</div>
+        <div class="logo-sub" :style="{ color: logoSubColor }">智能体平台</div>
       </div>
     </div>
 
     <el-menu
       :default-active="activeMenu"
       background-color="transparent"
-      text-color="#bfcbd9"
-      active-text-color="#fff"
+      :text-color="sidebarText"
+      :active-text-color="sidebarActiveText"
       router
       class="sidebar-menu"
     >
@@ -80,7 +87,8 @@ const activeMenu = computed(() => route.path);
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #001529 0%, #002140 100%);
+  background: linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-2) 100%);
+  transition: background 0.2s ease;
 }
 .logo {
   height: 60px;
@@ -88,9 +96,9 @@ const activeMenu = computed(() => route.path);
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border-bottom: 1px solid var(--sidebar-divider);
   flex-shrink: 0;
+  transition: border-color 0.2s ease;
 }
 .logo-mark {
   width: 88px;
@@ -106,8 +114,8 @@ const activeMenu = computed(() => route.path);
   object-position: left center;
 }
 .logo-text { display: flex; flex-direction: column; line-height: 1.2; }
-.logo-title { font-size: 15px; font-weight: 600; }
-.logo-sub { font-size: 11px; color: rgba(255, 255, 255, 0.55); margin-top: 1px; }
+.logo-title { font-size: 15px; font-weight: 600; transition: color 0.2s ease; }
+.logo-sub { font-size: 11px; margin-top: 1px; transition: color 0.2s ease; }
 
 .sidebar-menu {
   border-right: none;
@@ -118,18 +126,18 @@ const activeMenu = computed(() => route.path);
 :deep(.el-menu-item),
 :deep(.el-sub-menu__title) {
   margin: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   height: 42px;
   line-height: 42px;
 }
 :deep(.el-menu-item:hover),
 :deep(.el-sub-menu__title:hover) {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: var(--sidebar-hover) !important;
 }
 :deep(.el-menu-item.is-active) {
-  background: linear-gradient(90deg, #1890ff 0%, #096dd9 100%) !important;
-  color: #fff !important;
-  box-shadow: 0 2px 6px rgba(24, 144, 255, 0.35);
+  background: var(--sidebar-active) !important;
+  color: var(--sidebar-text-active) !important;
+  box-shadow: var(--sidebar-active-shadow);
 }
 :deep(.el-sub-menu .el-menu-item) {
   margin-left: 16px;

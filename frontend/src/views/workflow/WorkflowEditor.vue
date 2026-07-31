@@ -614,28 +614,28 @@ provide('wfSkillLookup', (skillId) => skills.value.find((s) => s.id === skillId)
 .wf-editor { display: flex; flex-direction: column; height: 100%; }
 .wf-editor__bar {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 8px 16px; border-bottom: 1px solid #e5e7eb; background: #fff;
+  padding: 8px 16px; border-bottom: 1px solid var(--border-base); background: var(--surface);
 }
 .wf-editor__title { display: flex; align-items: center; gap: 10px; }
-.wf-editor__name { font-weight: 600; font-size: 15px; }
+.wf-editor__name { font-weight: 600; font-size: 15px; color: var(--text-primary); }
 .wf-editor__body { flex: 1; display: flex; min-height: 0; }
 .wf-editor__palette {
-  width: 200px; border-right: 1px solid #e5e7eb; overflow-y: auto; padding: 10px; background: #fafafa;
+  width: 200px; border-right: 1px solid var(--border-base); overflow-y: auto; padding: 10px; background: var(--surface-muted);
 }
-.palette-title { font-size: 12px; color: #6b7280; margin-bottom: 8px; }
+.palette-title { font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 8px; }
 .palette-item {
   display: flex; align-items: center; gap: 8px; padding: 8px; margin-bottom: 8px;
-  background: #fff; border: 1px solid #e5e7eb; border-left: 3px solid var(--c);
+  background: var(--surface); border: 1px solid var(--border-base); border-left: 3px solid var(--c);
   border-radius: 6px; cursor: pointer; transition: all 0.15s;
 }
 .palette-item:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.1); transform: translateY(-1px); }
-.palette-item__label { font-size: 13px; font-weight: 600; }
-.palette-item__desc { font-size: 11px; color: #9ca3af; }
+.palette-item__label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.palette-item__desc { font-size: 11px; color: var(--el-text-color-placeholder); }
 .wf-editor__canvas { flex: 1; position: relative; }
 .wf-editor__empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  color: #9ca3af; pointer-events: none; font-size: 14px;
+  color: var(--el-text-color-placeholder); pointer-events: none; font-size: 14px;
 }
-.form-tip { font-size: 11px; color: #9ca3af; line-height: 1.4; }
-.form-tip--error { color: #f56c6c; }
+.form-tip { font-size: 11px; color: var(--el-text-color-secondary); line-height: 1.4; }
+.form-tip--error { color: var(--el-color-danger); }
 </style>

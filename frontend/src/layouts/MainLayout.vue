@@ -25,8 +25,6 @@ import TopBar from './components/TopBar.vue';
   width: 100vw;
 }
 .sidebar {
-  background: var(--brand-bg);
-  color: #fff;
   overflow: hidden;
   transition: width 0.2s;
   flex-shrink: 0;
@@ -36,16 +34,18 @@ import TopBar from './components/TopBar.vue';
   min-width: 0;  /* 关键：让内容区能缩 */
 }
 .topbar {
-  background: #fff;
-  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-base);
   padding: 0;
   height: var(--topbar-height);
   flex-shrink: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .content {
-  background: var(--content-bg);
+  background: var(--app-bg);
   padding: var(--content-padding);
   overflow: auto;
   height: calc(100vh - var(--topbar-height));
+  transition: background-color 0.2s ease;
 }
 </style>

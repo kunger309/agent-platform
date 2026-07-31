@@ -273,26 +273,33 @@ onMounted(() => {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;
 }
 .stat-card {
-  background: #fff; border-radius: 8px; padding: 16px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  background: var(--surface); border-radius: var(--radius-md); padding: 16px;
+  border: 1px solid var(--border-base);
+  box-shadow: var(--shadow-card);
   text-align: center;
 }
-.stat-value { font-size: 26px; font-weight: 600; color: #303133; }
-.stat-value.stat-success { color: #67c23a; }
-.stat-value.stat-failed { color: #f56c6c; }
-.stat-label { font-size: 12px; color: #909399; margin-top: 4px; }
+.stat-value { font-size: 26px; font-weight: 600; color: var(--text-primary); }
+.stat-value.stat-success { color: var(--el-color-success); }
+.stat-value.stat-failed { color: var(--el-color-danger); }
+.stat-label { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; }
 
-.filter-bar { background: #fff; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
-.table-card { background: #fff; border-radius: 8px; padding: 16px; }
-.text-muted { color: #c0c4cc; }
-.snippet { font-family: 'JetBrains Mono', Consolas, 'Microsoft YaHei', monospace; font-size: 12px; color: #606266; }
-.snippet.error { color: #f56c6c; }
-.slow { color: #e6a23c; font-weight: 600; }
+.filter-bar {
+  background: var(--surface); border: 1px solid var(--border-base);
+  border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 12px;
+}
+.table-card {
+  background: var(--surface); border: 1px solid var(--border-base);
+  border-radius: var(--radius-md); padding: 16px;
+}
+.text-muted { color: var(--el-text-color-placeholder); }
+.snippet { font-family: 'JetBrains Mono', Consolas, 'Microsoft YaHei', monospace; font-size: 12px; color: var(--el-text-color-regular); }
+.snippet.error { color: var(--el-color-danger); }
+.slow { color: var(--el-color-warning); font-weight: 600; }
 .pagination-bar { display: flex; justify-content: flex-end; margin-top: 12px; }
 .json-block {
   font-family: 'JetBrains Mono', Consolas, 'Microsoft YaHei', monospace;
-  font-size: 12px; background: #fafafa; border: 1px solid #ebeef5; border-radius: 4px;
+  font-size: 12px; background: var(--el-fill-color-blank); border: 1px solid var(--el-border-color-lighter); border-radius: 4px;
   padding: 10px; max-height: 240px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;
 }
-.json-block.error { color: #f56c6c; background: #fef0f0; }
+.json-block.error { color: var(--el-color-danger); background: color-mix(in srgb, var(--el-color-danger) 8%, var(--surface-muted)); }
 </style>

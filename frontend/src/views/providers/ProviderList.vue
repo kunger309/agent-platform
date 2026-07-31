@@ -268,6 +268,6 @@ onMounted(load);
 .provider-list { padding: 0; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-title { margin: 0; font-weight: 600; }
-.api-key { font-family: monospace; color: #909399; }
-.form-tip { font-size: 12px; color: #909399; margin-top: 4px; }
+.api-key { font-family: 'JetBrains Mono', Consolas, 'Microsoft YaHei', monospace; color: var(--el-text-color-secondary); }
+.form-tip { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; }
 </style>

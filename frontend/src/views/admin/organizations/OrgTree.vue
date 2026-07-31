@@ -228,5 +228,5 @@ onMounted(loadTree);
 .tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .add-child-btn { padding: 0 4px; opacity: 0.7; }
 .add-child-btn:hover { opacity: 1; }
-.hint { font-size: 12px; color: #909399; margin-top: 4px; line-height: 1.4; }
+.hint { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; line-height: 1.4; }
 </style>

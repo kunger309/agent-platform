@@ -3,12 +3,15 @@ import { createPinia } from 'pinia';
 import ElementPlus from 'element-plus';
 import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import 'element-plus/dist/index.css';
+import 'element-plus/theme-chalk/dark/css-vars.css';
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs';
 
 import App from './App.vue';
 import router from './router';
 import { useUserStore } from './stores/user';
+import { useThemeStore } from './stores/theme';
 import client from './api/client';
+import './styles/tokens.css';
 import './style.css';
 
 const app = createApp(App);
@@ -19,6 +22,10 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 
 const pinia = createPinia();
 app.use(pinia);
+
+// 在应用挂载前恢复主题，避免组件先以错误主题渲染
+const themeStore = useThemeStore();
+themeStore.init();
 
 // ★ 必须先注册 pinia 才能 use store
 const userStore = useUserStore();
