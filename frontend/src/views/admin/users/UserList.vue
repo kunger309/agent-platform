@@ -1,89 +1,98 @@
 <template>
-  <div class="page page-container user-mgmt">
-    <!-- 左侧组织树 -->
-    <div class="org-side">
-      <div class="org-side__header">
-        <span>组织</span>
-        <el-button text size="small" type="primary" @click="onOrgClear">全部</el-button>
-      </div>
-      <el-scrollbar class="org-side__body">
-        <el-tree
-          ref="orgTreeRef"
-          :data="orgTree"
-          :props="{ label: 'name', children: 'children' }"
-          node-key="id"
-          :expand-on-click-node="false"
-          highlight-current
-          default-expand-all
-          @node-click="onOrgClick"
-        >
-          <template #default="{ node }">
-            <span class="org-node">{{ node.label }}</span>
-          </template>
-        </el-tree>
-      </el-scrollbar>
-    </div>
+  <div class="page user-list-page">
+    <h2 class="page-title">用户管理</h2>
 
-    <!-- 右侧用户表格 -->
-    <div class="user-main">
-      <h2>用户管理</h2>
+    <el-row :gutter="16" class="user-row">
+      <!-- 左侧：组织树（更窄，组织节点通常不多） -->
+      <el-col :xs="24" :md="5" class="user-col">
+        <el-card shadow="never" class="org-card">
+          <template #header>
+            <div class="card-hd">
+              <span>组织</span>
+              <el-button text size="small" type="primary" @click="onOrgClear">全部</el-button>
+            </div>
+          </template>
+          <el-scrollbar class="org-card__scroll">
+            <el-tree
+              ref="orgTreeRef"
+              :data="orgTree"
+              :props="{ label: 'name', children: 'children' }"
+              node-key="id"
+              :expand-on-click-node="false"
+              highlight-current
+              default-expand-all
+              @node-click="onOrgClick"
+            >
+              <template #default="{ node }">
+                <span class="org-node">{{ node.label }}</span>
+              </template>
+            </el-tree>
+          </el-scrollbar>
+        </el-card>
+      </el-col>
 
-      <div class="toolbar">
-        <el-input v-model="query.keyword" placeholder="搜索用户名/姓名/邮箱" clearable style="width: 240px" @change="loadList" />
-        <el-select v-model="query.status" placeholder="状态" clearable style="width: 140px" @change="loadList">
-          <el-option label="启用" value="active" />
-          <el-option label="禁用" value="disabled" />
-          <el-option label="锁定" value="locked" />
-        </el-select>
-        <el-tag v-if="currentOrgName" closable type="info" style="margin-left: 8px" @close="onOrgClear">
-          组织：{{ currentOrgName }}
-        </el-tag>
-        <el-button type="primary" :icon="Plus" style="margin-left: auto" @click="openCreate">新建用户</el-button>
-      </div>
+      <!-- 右侧：用户表格（占大头，确保表格不出现 X 滚动条） -->
+      <el-col :xs="24" :md="19" class="user-col">
+        <el-card shadow="never" class="user-card">
+          <template #header>
+            <div class="toolbar">
+              <el-input v-model="query.keyword" placeholder="搜索用户名/姓名" clearable style="width: 240px" @change="loadList" />
+              <el-select v-model="query.status" placeholder="状态" clearable style="width: 140px" @change="loadList">
+                <el-option label="启用" value="active" />
+                <el-option label="禁用" value="disabled" />
+                <el-option label="锁定" value="locked" />
+              </el-select>
+              <el-tag v-if="currentOrgName" closable type="info" style="margin-left: 8px" @close="onOrgClear">
+                组织：{{ currentOrgName }}
+              </el-tag>
+              <el-button type="primary" :icon="Plus" style="margin-left: auto" @click="openCreate">新建用户</el-button>
+            </div>
+          </template>
+          <el-table :data="list" v-loading="loading" border stripe height="100%">
+            <el-table-column type="index" label="序号" width="56" align="center" header-align="center" />
+            <el-table-column prop="username" label="用户名" min-width="100" header-align="center" />
+            <el-table-column prop="name" label="姓名" min-width="100" header-align="center" />
+            <el-table-column label="组织" min-width="130" header-align="center">
+              <template #default="{ row }">
+                <el-tag v-if="primaryOrg(row)" type="warning" size="small">{{ primaryOrg(row).name }}</el-tag>
+                <span v-else class="muted">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="角色" min-width="130" header-align="center">
+              <template #default="{ row }">
+                <el-tag v-for="r in row.roles" :key="r" type="success" size="small" style="margin-right: 4px">{{ r }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="80" header-align="center">
+              <template #default="{ row }">
+                <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="lastLoginAt" label="最后登录" width="140" header-align="center">
+              <template #default="{ row }">{{ formatTime(row.lastLoginAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" fixed="right" header-align="center">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
+                <el-button type="warning" link @click="resetPwd(row)">重置密码</el-button>
+                <el-button type="danger" link :disabled="row.username === 'admin'" @click="del(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
 
-      <el-table :data="list" v-loading="loading" border stripe style="margin-top: 16px">
-        <el-table-column prop="username" label="用户名" width="140" />
-        <el-table-column prop="name" label="姓名" width="140" />
-        <el-table-column prop="email" label="邮箱" />
-        <el-table-column label="组织" min-width="160">
-          <template #default="{ row }">
-            <el-tag v-if="primaryOrg(row)" type="warning" size="small">{{ primaryOrg(row).name }}</el-tag>
-            <span v-else class="muted">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="角色" width="220">
-          <template #default="{ row }">
-            <el-tag v-for="r in row.roles" :key="r" type="success" size="small" style="margin-right: 4px">{{ r }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="lastLoginAt" label="最后登录" width="160">
-          <template #default="{ row }">{{ formatTime(row.lastLoginAt) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-            <el-button type="warning" link @click="resetPwd(row)">重置密码</el-button>
-            <el-button type="danger" link :disabled="row.username === 'admin'" @click="del(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-pagination
-        v-model:current-page="query.page"
-        v-model:page-size="query.pageSize"
-        :total="total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        style="margin-top: 12px; justify-content: flex-end"
-        @current-change="loadList"
-        @size-change="loadList"
-      />
-    </div>
+          <el-pagination
+            v-model:current-page="query.page"
+            v-model:page-size="query.pageSize"
+            :total="total"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            class="user-card__pager"
+            @current-change="loadList"
+            @size-change="loadList"
+          />
+        </el-card>
+      </el-col>
+    </el-row>
 
     <el-dialog v-model="dialog.visible" :title="dialog.id ? '编辑用户' : '新建用户'" width="540px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
@@ -320,36 +329,67 @@ onMounted(() => { loadRoles(); loadOrgs(); loadList(); });
 </script>
 
 <style scoped>
-.user-mgmt {
-  display: flex;
-  gap: 16px;
-  align-items: stretch;
-}
-.org-side {
-  width: 240px;
-  flex: 0 0 240px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+.user-list-page {
+  /* 整页恰好填满 MainLayout.content（无 .page-container 的 max-width 限制 → 不再两侧留白） */
+  height: calc(100vh - var(--topbar-height) - 2 * var(--content-padding));
   display: flex;
   flex-direction: column;
-  background: var(--el-bg-color);
-  max-height: calc(100vh - 140px);
+  overflow: hidden;
 }
-.org-side__header {
+.page-title {
+  margin: 0 0 16px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.user-row {
+  flex: 1;
+  min-height: 0;
+}
+.user-col {
+  height: 100%;
+}
+.org-card,
+.user-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.org-card :deep(.el-card__header),
+.user-card :deep(.el-card__header) {
+  flex-shrink: 0;
+}
+.org-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow: hidden;
+}
+.org-card__scroll {
+  flex: 1;
+  min-height: 0;
+}
+.user-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+.user-card__pager {
+  flex-shrink: 0;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+.card-hd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--el-border-color);
-  font-weight: 600;
 }
-.org-side__body {
-  flex: 1;
-  padding: 8px;
-}
-.user-main {
-  flex: 1;
-  min-width: 0;
+.toolbar {
+  display: flex;
+  align-items: center;
 }
 .muted {
   color: var(--el-text-color-secondary);
@@ -357,6 +397,4 @@ onMounted(() => { loadRoles(); loadOrgs(); loadList(); });
 .org-node {
   font-size: 13px;
 }
-.page-title { margin: 0 0 16px; font-weight: 600; }
-.toolbar { display: flex; align-items: center; }
 </style>

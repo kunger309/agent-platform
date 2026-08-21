@@ -86,13 +86,26 @@ export class ChatEngine {
           let rounds = 0;
           while (rounds < maxToolRounds) {
             const ai: any = await llmWithTools.invoke(messages);
-            messages.push(ai);
             const calls = ai?.tool_calls || [];
             if (!calls.length) {
-              // 无工具调用 → 这是最终回答，流式输出
-              await this.streamFinal(llm, messages, out, (t) => (accumulated += t));
+              // 无工具调用 → invoke() 已经拿到最终回答，直接把它流式推给前端。
+              // ⚠️ 不要再去调 llm.stream(messages) —— 那会让 LLM 在看到 ai 已在历史中后再生成一遍，
+              //    同样内容会出现两次（截图里「本系统共有 4 个技能。本系统共有 4 个技能。」就是这个原因）。
+              const content = ai?.content;
+              const text =
+                typeof content === 'string'
+                  ? content
+                  : Array.isArray(content)
+                    ? content.map((c: any) => (typeof c === 'string' ? c : c.text ?? '')).join('')
+                    : '';
+              if (text) {
+                accumulated += text;
+                out.push(`data: ${JSON.stringify({ delta: text })}\n\n`);
+              }
               break;
             }
+            // 有工具调用：把这一轮的 AI 消息入栈，供后续工具执行结果对齐 tool_call_id
+            messages.push(ai);
             // 执行每个工具调用
             for (const call of calls) {
               const tool = tools.find((t) => t.name === call.name);

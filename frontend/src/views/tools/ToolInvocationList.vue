@@ -64,9 +64,9 @@
       </el-form>
     </div>
 
-    <!-- 表格 -->
+    <!-- 表格（height=100% 让 el-table 自己接管「固定表头 + body 内部滚动」，避免外层 overflow 触发双滚动条） -->
     <div class="table-card">
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe height="100%">
         <el-table-column label="技能" min-width="160">
           <template #default="{ row }">
             <span v-if="row.skill">{{ row.skill.name }}</span>
@@ -264,13 +264,22 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-container { padding: 16px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.page-container {
+  padding: 16px;
+  /* 显式计算填满 MainLayout .content 内层区域（高度 100vh - 顶栏 - 2×content-padding）
+     避免使用 height: 100% 在 box-sizing 边界情况下出现 1~2px 溢出，触发外层滚动条 */
+  height: calc(100vh - var(--topbar-height) - 2 * var(--content-padding));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0; }
 .page-header h2 { margin: 0; font-size: 20px; font-weight: 600; }
 .header-actions { display: flex; gap: 8px; }
 
 .stat-cards {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;
+  flex-shrink: 0;
 }
 .stat-card {
   background: var(--surface); border-radius: var(--radius-md); padding: 16px;
@@ -286,16 +295,21 @@ onMounted(() => {
 .filter-bar {
   background: var(--surface); border: 1px solid var(--border-base);
   border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 12px;
+  flex-shrink: 0;
 }
 .table-card {
   background: var(--surface); border: 1px solid var(--border-base);
   border-radius: var(--radius-md); padding: 16px;
+  flex: 1;
+  min-height: 0;  /* 关键：允许 flex 子项在父容器内收缩到 0，否则会被内容撑开 */
+  display: flex;
+  flex-direction: column;
 }
 .text-muted { color: var(--el-text-color-placeholder); }
 .snippet { font-family: 'JetBrains Mono', Consolas, 'Microsoft YaHei', monospace; font-size: 12px; color: var(--el-text-color-regular); }
 .snippet.error { color: var(--el-color-danger); }
 .slow { color: var(--el-color-warning); font-weight: 600; }
-.pagination-bar { display: flex; justify-content: flex-end; margin-top: 12px; }
+.pagination-bar { display: flex; justify-content: flex-end; margin-top: 12px; flex-shrink: 0; }
 .json-block {
   font-family: 'JetBrains Mono', Consolas, 'Microsoft YaHei', monospace;
   font-size: 12px; background: var(--el-fill-color-blank); border: 1px solid var(--el-border-color-lighter); border-radius: 4px;
