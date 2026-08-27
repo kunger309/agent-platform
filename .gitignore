@@ -1,0 +1,15 @@
+# ===== 环境变量（含密钥，严禁入库）=====
+# 说明：精确匹配文件名 ".env"，不会影响 ".env.example" 模板文件
+.env
+.env.local
+.env.production
+
+# ===== 日志与临时文件 =====
+*.log
+*.tsbuildinfo
+
+# ===== 系统与编辑器 =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
