@@ -7,6 +7,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
+# 国内网络优化：Alpine apk 包管理器换阿里云镜像源
+RUN sed -i 's#https://dl-cdn.alpinelinux.org#https://mirrors.aliyun.com#g' /etc/apk/repositories
+
 # 兼容 bcrypt 在 alpine 上需要的原生依赖
 RUN apk add --no-cache python3 make g++ libc6-compat
 
