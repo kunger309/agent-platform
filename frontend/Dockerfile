@@ -7,6 +7,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# 国内网络优化：npm 走 npmmirror 源
+RUN npm config set registry https://registry.npmmirror.com
+
 COPY frontend/package*.json ./
 RUN npm ci
 

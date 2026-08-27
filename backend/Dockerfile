@@ -10,6 +10,10 @@ WORKDIR /app
 # 兼容 bcrypt 在 alpine 上需要的原生依赖
 RUN apk add --no-cache python3 make g++ libc6-compat
 
+# 国内网络优化：npm 走 npmmirror 源，Prisma 引擎走国内二进制镜像
+RUN npm config set registry https://registry.npmmirror.com
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma/
 
@@ -26,7 +30,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY backend/ ./
 
-RUN npm run build && npm prune --production
+# 注意：不可 npm prune --production —— 启动命令依赖 prisma CLI（migrate/seed）
+# 与 ts-node（执行 seed 脚本），它们位于 devDependencies，需要完整保留。
+RUN npm run build
 
 # ===== Stage 3: Runner =====
 FROM node:20-alpine AS runner
