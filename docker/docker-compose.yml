@@ -104,7 +104,7 @@ services:
       UPLOAD_DIR: /app/uploads
       MAX_UPLOAD_SIZE_MB: 100
     volumes:
-      - backend_uploads:/app/uploads
+      - ../backend/uploads:/app/uploads
     healthcheck:
       # 显式走 127.0.0.1（IPv4），避免 alpine 的 wget 默认解析 localhost 到 ::1 导致误报
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
@@ -155,4 +155,3 @@ volumes:
   postgres_data:
   redis_data:
   qdrant_data:
-  backend_uploads:
