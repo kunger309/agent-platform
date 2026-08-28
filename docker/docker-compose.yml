@@ -96,6 +96,9 @@ services:
       VECTOR_STORE_PROVIDER: qdrant
       JWT_SECRET: ${JWT_SECRET:-please-change-me-to-a-32-char-random-secret-string}
       JWT_EXPIRES_IN: 7d
+      # API Key 加密密钥（AES-256-GCM，32 字节 hex 即 64 字符）
+      # 生成：openssl rand -hex 32
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
       DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-admin}
       DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-123456}
       UPLOAD_DIR: /app/uploads
@@ -103,7 +106,8 @@ services:
     volumes:
       - backend_uploads:/app/uploads
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/health']
+      # 显式走 127.0.0.1（IPv4），避免 alpine 的 wget 默认解析 localhost 到 ::1 导致误报
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
       interval: 30s
       timeout: 10s
       retries: 3

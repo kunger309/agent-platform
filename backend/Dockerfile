@@ -43,6 +43,13 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# 兼容 Prisma 5 + Alpine 3.18+：
+#   Prisma 5 的 query/schema engine 动态链接库依赖 libssl.so.1.1（OpenSSL 1.1.x）。
+#   Alpine 3.14 是最后一个官方仓库仍带 libssl1.1 的版本，
+#   从其 main 仓库回拉 libssl1.1 + libcrypto1.1 即可让 Prisma 引擎正常运行。
+#   体积代价 ~3 MB；不影响业务代码、不升级 Prisma、不换基础镜像。
+RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/v3.14/main libssl1.1
+
 # 创建非 root 用户
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nestjs
@@ -60,5 +67,6 @@ USER nestjs
 
 EXPOSE 3000
 
-# 启动时执行：migrate + seed → 启动服务
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/main.js"]
+# 启动时执行：migrate → seed（用编译产物 dist/prisma/seed.js，绕开 ts-node/Node20 ESM 解析问题） → 启动服务
+# 注意：nest-cli sourceRoot=src → 编译产物在 dist/src/main.js（不是 dist/main.js）
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/src/main.js"]

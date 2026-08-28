@@ -17,8 +17,38 @@ import { createOpenAICompatibleChatModel } from './adapters/openai-compatible.ad
 import { ChatEngine } from './engines/chat-engine';
 import { RetrieversService } from '../retrievers/retrievers.service';
 
-/** 序列化输出：API Key 只回显末尾 4 位 */
-function toPublic(p: any, maskedKey: string) {
+/**
+ * 容错解密：解密/Tag 校验失败时打 warn 并把字段标记为失败，
+ * 不让单条记录拖垮整个 list/findOne。
+ * 触发场景：ENCRYPTION_KEY 与历史数据不兼容（典型：密钥轮换或迁移后）。
+ */
+function safeDecryptAndMask(
+  encryption: EncryptionService,
+  logger: Logger,
+  p: any,
+): { masked: string; failed: boolean } {
+  try {
+    if (!p.apiKeyEncrypted) return { masked: '', failed: false };
+    const plain = encryption.decrypt(p.apiKeyEncrypted);
+    return { masked: encryption.mask(plain), failed: false };
+  } catch (err: any) {
+    logger.warn(
+      `[LlmService] decrypt failed for provider "${p?.name}" (${p?.id}): ${err?.message}. ` +
+        '通常是 ENCRYPTION_KEY 与历史数据不兼容，请提示用户在 UI 重新配置 API Key。',
+    );
+    return {
+      masked: '🔒 [解密失败，请重新配置 API Key]',
+      failed: true,
+    };
+  }
+}
+
+/** 序列化输出：API Key 只回显末尾 4 位；解密失败时输出占位 + 失败标记 */
+function toPublic(
+  p: any,
+  maskedKey: string,
+  apiKeyDecryptFailed = false,
+) {
   return {
     id: p.id,
     organizationId: p.organizationId,
@@ -26,6 +56,7 @@ function toPublic(p: any, maskedKey: string) {
     providerType: p.providerType,
     baseUrl: p.baseUrl,
     apiKeyMasked: maskedKey,
+    apiKeyDecryptFailed,
     models: p.models,
     defaultModel: p.defaultModel,
     isDefault: p.isDefault,
@@ -46,13 +77,16 @@ export class LlmService {
 
   private readonly logger = new Logger(LlmService.name);
 
-  /** 当前组织可用的 Provider 列表（API Key 仅回显末尾 4 位） */
+  /** 当前组织可用的 Provider 列表（API Key 仅回显末尾 4 位，解密失败仅影响该条） */
   async list(organizationId: string) {
     const items = await this.prisma.llmProvider.findMany({
       where: { organizationId },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
-    return items.map((p) => toPublic(p, this.encryption.mask(this.encryption.decrypt(p.apiKeyEncrypted))));
+    return items.map((p) => {
+      const { masked, failed } = safeDecryptAndMask(this.encryption, this.logger, p);
+      return toPublic(p, masked, failed);
+    });
   }
 
   async findOne(id: string, organizationId: string) {
@@ -60,7 +94,8 @@ export class LlmService {
       where: { id, organizationId },
     });
     if (!p) throw new NotFoundException('Provider 不存在');
-    return toPublic(p, this.encryption.mask(this.encryption.decrypt(p.apiKeyEncrypted)));
+    const { masked, failed } = safeDecryptAndMask(this.encryption, this.logger, p);
+    return toPublic(p, masked, failed);
   }
 
   async create(organizationId: string, dto: CreateLlmProviderDto) {
@@ -91,7 +126,8 @@ export class LlmService {
         status: 'active',
       },
     });
-    return toPublic(created, this.encryption.mask(this.encryption.decrypt(created.apiKeyEncrypted)));
+    const { masked, failed } = safeDecryptAndMask(this.encryption, this.logger, created);
+    return toPublic(created, masked, failed);
   }
 
   async update(id: string, organizationId: string, dto: UpdateLlmProviderDto) {
@@ -121,7 +157,8 @@ export class LlmService {
     }
 
     const updated = await this.prisma.llmProvider.update({ where: { id }, data });
-    return toPublic(updated, this.encryption.mask(this.encryption.decrypt(updated.apiKeyEncrypted)));
+    const { masked, failed } = safeDecryptAndMask(this.encryption, this.logger, updated);
+    return toPublic(updated, masked, failed);
   }
 
   async delete(id: string, organizationId: string) {
