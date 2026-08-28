@@ -418,9 +418,13 @@ export class AgentsService {
             runId = ev.runId;
           } else if (ev.type === 'node_token') {
             const delta = ev.delta ?? '';
-            if (delta) {
+            // 后端做 includes 去重,避免 workflow 中 LLM 节点 + Answer 节点
+            // emit 同一段内容导致落库 accText 重复;同时给前端传 dedup=true
+            // 标记,前端做相同去重,保证两端一致。chat 智能体走 chatAsChat,
+            // delta 不带 dedup,完全不受影响。
+            if (delta && !accText.includes(delta)) {
               accText += delta;
-              stream.push(`data: ${JSON.stringify({ delta })}\n\n`);
+              stream.push(`data: ${JSON.stringify({ delta, dedup: true })}\n\n`);
             }
           } else if (ev.type === 'node_end') {
             // 节点结束：可用于落日志；对话流本身不直接展示

@@ -44,7 +44,9 @@ export function chatStream(agentId, payload, callbacks = {}) {
         // 后端 keepalive 心跳：模型还在思考中
         callbacks.onThinking?.();
       } else if (data.delta !== undefined) {
-        callbacks.onDelta?.(data.delta);
+        // dedup 标记:workflow 智能体的 delta 带 dedup=true,前端 includes 去重;
+        // chat 智能体的 delta 不带 dedup,直接累加,不受影响。
+        callbacks.onDelta?.(data.delta, { dedup: data.dedup });
       } else if (data.done) {
         // 由 onFinish 统一收口
       } else if (data.error) {

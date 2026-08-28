@@ -41,8 +41,11 @@ export function useChatStream(agentId) {
         // 已产生部分内容，重放会导致重复输出，只提示不自动重发
         messages.value[aiIdx].content += '\n\n> ⚠️ 连接中断，回答未输出完整，请重新发送。';
       },
-      onDelta: (delta) => {
+      onDelta: (delta, meta) => {
         reconnecting.value = '';
+        // workflow 智能体:meta.dedup=true,做 includes 去重(防 LLM+Answer 重复 emit)
+        // chat 智能体:meta.dedup undefined,直接累加,LLM 真实重复输出不被误杀
+        if (meta?.dedup && messages.value[aiIdx].content.includes(delta)) return;
         messages.value[aiIdx].content += delta;
       },
       onDone: () => {
