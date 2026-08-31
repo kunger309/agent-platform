@@ -101,7 +101,7 @@ onMounted(() => nextTick(() => (props.streaming ? lightPost() : fullPost())))
 .md-view {
   font-size: 14px;
   line-height: 1.7;
-  color: #303133;
+  color: var(--text-regular);
   word-break: break-word;
 }
 .md-view :deep(p) { margin: 6px 0; }
@@ -112,6 +112,7 @@ onMounted(() => nextTick(() => (props.streaming ? lightPost() : fullPost())))
   margin: 12px 0 6px;
   font-weight: 600;
   line-height: 1.3;
+  color: var(--text-primary);
 }
 .md-view :deep(h1) { font-size: 19px; }
 .md-view :deep(h2) { font-size: 17px; }
@@ -119,14 +120,14 @@ onMounted(() => nextTick(() => (props.streaming ? lightPost() : fullPost())))
 .md-view :deep(ul),
 .md-view :deep(ol) { padding-left: 22px; margin: 6px 0; }
 .md-view :deep(li) { margin: 3px 0; }
-.md-view :deep(a) { color: #409eff; text-decoration: none; }
+.md-view :deep(a) { color: var(--brand-primary); text-decoration: none; }
 .md-view :deep(a:hover) { text-decoration: underline; }
 .md-view :deep(blockquote) {
   margin: 6px 0;
   padding: 4px 12px;
-  border-left: 3px solid #dcdfe6;
-  background: #f5f7fa;
-  color: #606266;
+  border-left: 3px solid var(--border-base);
+  background: var(--el-fill-color-light);
+  color: var(--text-secondary);
 }
 .md-view :deep(table) {
   border-collapse: collapse;
@@ -136,12 +137,12 @@ onMounted(() => nextTick(() => (props.streaming ? lightPost() : fullPost())))
 }
 .md-view :deep(th),
 .md-view :deep(td) {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--el-border-color);
   padding: 6px 10px;
   text-align: left;
 }
-.md-view :deep(th) { background: #f5f7fa; font-weight: 600; }
-.md-view :deep(hr) { border: none; border-top: 1px solid #ebeef5; margin: 12px 0; }
+.md-view :deep(th) { background: var(--el-fill-color-light); font-weight: 600; color: var(--text-primary); }
+.md-view :deep(hr) { border: none; border-top: 1px solid var(--border-base); margin: 12px 0; }
 .md-view :deep(img) {
   max-width: 100%;
   border-radius: 6px;
@@ -151,7 +152,7 @@ onMounted(() => nextTick(() => (props.streaming ? lightPost() : fullPost())))
 .md-view :deep(code) {
   font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 12.5px;
-  background: #f0f2f5;
+  background: var(--el-fill-color-light);
   padding: 1px 5px;
   border-radius: 4px;
   color: #d63384;
@@ -201,7 +202,7 @@ onMounted(() => nextTick(() => (props.streaming ? lightPost() : fullPost())))
 .md-view :deep(.code-header button:hover) { background: #30363d; }
 .md-view.streaming :deep(p:last-child)::after {
   content: '▍';
-  color: #409eff;
+  color: var(--brand-primary);
   font-weight: 600;
   animation: blink 1s steps(2) infinite;
 }
