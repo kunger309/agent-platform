@@ -1,9 +1,24 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ResetPasswordDto } from './dto/update-user.dto';
+
+/**
+ * 越权防护：仅超级管理员可修改/删除超级管理员账号。
+ *
+ * 背景：update/remove 接口只校验「调用者是否持有 user:edit / user:delete 权限码」，
+ * 不校验「被操作对象是谁」。若普通 admin / editor / 自定义角色也能 PATCH 一个
+ * isSuperAdmin=true 的账号（例如把它的 roleCodes 从 super_admin 改成 viewer），
+ * 该超管会瞬间失权、且无需 DB 介入无法回滚——属高危自残漏洞。
+ * 故在此按「对象维度」再锁一层：被操作对象是超管且操作者不是超管 → 拒绝。
+ */
+function assertCanModifySuperAdmin(target: { isSuperAdmin?: boolean }, operator: any) {
+  if (target.isSuperAdmin && !operator?.isSuperAdmin) {
+    throw new ForbiddenException('仅超级管理员可修改超级管理员账号');
+  }
+}
 
 @Injectable()
 export class UsersService {
@@ -179,6 +194,7 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto, currentUser: any) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
+    assertCanModifySuperAdmin(existing, currentUser);
     if (existing.username === 'admin' && dto.status === 'disabled') {
       throw new ConflictException('Cannot disable built-in admin');
     }
@@ -228,9 +244,10 @@ export class UsersService {
     return this.findOne(id);
   }
 
-  async remove(id: string) {
+  async remove(id: string, currentUser: any) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('User not found');
+    assertCanModifySuperAdmin(existing, currentUser);
     if (existing.username === 'admin') {
       throw new ConflictException('Cannot delete built-in admin');
     }

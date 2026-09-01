@@ -4,6 +4,10 @@
 .env.local
 .env.production
 
+# ===== 依赖与构建产物（防误提交，膨胀仓库）=====
+node_modules
+dist
+
 # ===== 日志与临时文件 =====
 *.log
 *.tsbuildinfo

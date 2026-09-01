@@ -73,9 +73,13 @@
             </el-table-column>
             <el-table-column label="操作" width="200" fixed="right" header-align="center">
               <template #default="{ row }">
-                <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-                <el-button type="warning" link @click="resetPwd(row)">重置密码</el-button>
-                <el-button type="danger" link :disabled="row.username === 'admin'" @click="del(row)">删除</el-button>
+                <el-tooltip :content="'仅超级管理员可操作'" :disabled="!(row.isSuperAdmin && !me.isSuperAdmin)" placement="top">
+                  <span>
+                    <el-button type="primary" link :disabled="row.isSuperAdmin && !me.isSuperAdmin" @click="openEdit(row)">编辑</el-button>
+                    <el-button type="warning" link :disabled="row.isSuperAdmin && !me.isSuperAdmin" @click="resetPwd(row)">重置密码</el-button>
+                    <el-button type="danger" link :disabled="row.isSuperAdmin && !me.isSuperAdmin" @click="del(row)">删除</el-button>
+                  </span>
+                </el-tooltip>
               </template>
             </el-table-column>
           </el-table>
@@ -140,6 +144,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useUserStore } from '@/stores/user';
 import {
   listUsers,
   createUser,
@@ -149,6 +154,9 @@ import {
   listRoles,
   listOrganizations,
 } from '@/api';
+
+// 当前登录用户（用于超管操作权限 UI 屏蔽；真护栏在后端 users.service 的 assertCanModifySuperAdmin）
+const me = useUserStore();
 
 const list = ref([]);
 const total = ref(0);
@@ -263,6 +271,10 @@ function openCreate() {
 }
 
 function openEdit(row) {
+  if (row.isSuperAdmin && !me.isSuperAdmin) {
+    ElMessage.warning('仅超级管理员可编辑超级管理员账号');
+    return;
+  }
   dialog.id = row.id;
   const po = primaryOrg(row);
   Object.assign(form, {
@@ -309,12 +321,20 @@ async function save() {
 }
 
 async function resetPwd(row) {
+  if (row.isSuperAdmin && !me.isSuperAdmin) {
+    ElMessage.warning('仅超级管理员可重置超级管理员密码');
+    return;
+  }
   const { value } = await ElMessageBox.prompt('请输入新密码', '重置密码', { inputPattern: /.{6,}/, inputErrorMessage: '至少 6 位' });
   await resetPassword(row.id, value);
   ElMessage.success('重置成功');
 }
 
 async function del(row) {
+  if (row.isSuperAdmin && !me.isSuperAdmin) {
+    ElMessage.warning('仅超级管理员可删除超级管理员账号');
+    return;
+  }
   await ElMessageBox.confirm(`确认删除用户 ${row.username}？`, '提示', { type: 'warning' });
   await deleteUser(row.id);
   ElMessage.success('删除成功');

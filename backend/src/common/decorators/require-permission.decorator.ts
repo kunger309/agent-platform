@@ -14,7 +14,7 @@ export const RequirePermission = (code: string) => SetMetadata(REQUIRE_PERMISSIO
 /**
  * 标记 Controller 方法所需的任一权限码（OR 语义）
  * @example
- *   @RequireAnyPermission(['user:list', 'user:audit'])
+ *   @RequireAnyPermission(['user:list', 'user:edit'])
  */
 export const RequireAnyPermission = (codes: string[]) =>
   SetMetadata(REQUIRE_PERMISSION_KEY, { type: 'any', codes });
